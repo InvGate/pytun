@@ -15,11 +15,9 @@ class Tunnel(object):
         self.transport = transport
         self.logger = logger
         self.keep_alive_time = keep_alive_time
-        self.exit = False
         self.event = threading.Event()
 
-    def handler(self, chan, remote, local):
-        host, port = self.remote_host, self.remote_port
+    def handler(self, chan, host, port):
         with socket.socket() as sock:
             try:
                 sock.connect((host, port))
@@ -74,13 +72,19 @@ class Tunnel(object):
         self.timer.start()
 
     def reverse_forward_tunnel(self):
-        self.transport.request_port_forward("", self.server_port, self.handler)
-        self.timer = threading.Timer(self.keep_alive_time, self.validate_tunnel_up)
+        self.transport.request_port_forward("", self.server_port)
+        self.timer = threading.Timer(30, self.validate_tunnel_up)
         self.timer.start()
-        self.event.wait()
+        while True:
+            chan = self.transport.accept(1000)
+            if chan is None:
+                continue
+            thr = threading.Thread(
+                target=self.handler, args=(chan, self.remote_host, self.remote_port)
+            )
+            thr.setDaemon(True)
+            thr.start()
 
     def stop(self):
-        self.exit = 1
         if self.timer:
             self.timer.cancel()
-        self.event.set()

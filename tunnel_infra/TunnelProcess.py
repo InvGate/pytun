@@ -16,7 +16,7 @@ from os.path import isabs, dirname, realpath, join
 class TunnelProcess(multiprocessing.Process):
 
     def __init__(self, server_host, server_port, server_key, user_to_loging, key_file, remote_port_to_forward,
-                 remote_host, remote_port, logger, keep_alive_time):
+                 remote_host, remote_port, logger, keep_alive_time, log_level, log_to_console):
         self.server_host = server_host
         self.server_port = server_port
         self.server_key = server_key
@@ -25,9 +25,11 @@ class TunnelProcess(multiprocessing.Process):
         self.remote_port_to_forward = remote_port_to_forward
         self.remote_host = remote_host
         self.remote_port = remote_port
-        self.logger = logger
+        self.logger = None
         self.keep_alive_time = keep_alive_time
         self.tunnel = None
+        self.log_level = log_level
+        self.log_to_console = log_to_console
         super().__init__()
 
     def exit_gracefully(self, *args):
@@ -38,6 +40,7 @@ class TunnelProcess(multiprocessing.Process):
         sys.exit(0)
 
     def run(self):
+        self.logger = configure_logger(self.log_level, self.log_to_console, name="pytun-tunnel")
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         client = paramiko.SSHClient()
@@ -85,10 +88,8 @@ class TunnelProcess(multiprocessing.Process):
         config.read(ini_file)
         directory = dirname(realpath(ini_file))
         defaults = config['tunnel']
-        if logger is None:
-            log_level = defaults.get('log_level')
-            log_to_console = defaults.get('log_to_console', False)
-            logger = configure_logger(log_level, log_to_console)
+        log_level = defaults.get('log_level')
+        log_to_console = defaults.get('log_to_console', False)
         server_host = defaults['server_host']
         server_port = int(defaults.get('server_port', SSH_PORT))
         remote_host = defaults['remote_host']
@@ -105,5 +106,5 @@ class TunnelProcess(multiprocessing.Process):
             server_key = join(directory, server_key)
         keep_alive_time = int(defaults.get("keep_alive_time", 30))
         tunnel_process = TunnelProcess(server_host, server_port, server_key, user_to_loging, key_file,
-                                       remote_port_to_forward, remote_host, remote_port, logger, keep_alive_time)
+                                       remote_port_to_forward, remote_host, remote_port, None, keep_alive_time, log_level, log_to_console)
         return tunnel_process

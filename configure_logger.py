@@ -2,11 +2,13 @@ import logging
 from logging.handlers import TimedRotatingFileHandler
 
 
-def configure_logger(level=None, log_to_console=False):
+def configure_logger(level=None, log_to_console=False, name="pytun"):
     level = level or logging.INFO
-    logger = logging.getLogger('pytun')
-    paramiko_log = logging.getLogger("paramiko")
-    loggers = [logger, paramiko_log]
+    logger = logging.getLogger(name)
+    loggers = [logger]
+    if name != "pytun":
+        paramiko_log = logging.getLogger("paramiko")
+        loggers.append(paramiko_log)
     log_handler = TimedRotatingFileHandler(filename="tunnel.log", when="midnight")
     log_formatter = logging.Formatter('%(asctime)s %(process)d %(name)-12s %(levelname)-8s %(message)s')
     log_handler.setFormatter(log_formatter)
