@@ -1,5 +1,9 @@
 # pytun
-Tunnel tool to allow services in a local network from cloud
+Tunnel tool to allow services in a local network to be accessed from cloud using python 3.6+
+
+Installation:
+* Download the repo
+* Install dependencies: pip install -r requirements.txt 
 
 Usage:
 ```
