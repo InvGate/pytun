@@ -33,7 +33,8 @@ class EmailAlertSender(AlertSender):
             message["To"] = self.receiver_email
             smtp_class = smtplib.SMTP_SSL if self.security == 'ssl' else smtplib.SMTP
             with smtp_class(self.host, self.port) as server:
-                server.starttls()
+                if self.security == 'tls':
+                    server.starttls()
                 server.login(self.login, self.password)
                 res = server.sendmail(
                     self.sender_email, self.receiver_email, message.as_string()
