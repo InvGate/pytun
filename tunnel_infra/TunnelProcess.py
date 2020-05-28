@@ -15,8 +15,9 @@ from os.path import isabs, dirname, realpath, join
 
 class TunnelProcess(multiprocessing.Process):
 
-    def __init__(self, server_host, server_port, server_key, user_to_loging, key_file, remote_port_to_forward,
+    def __init__(self, tunnel_name, server_host, server_port, server_key, user_to_loging, key_file, remote_port_to_forward,
                  remote_host, remote_port, logger, keep_alive_time, log_level, log_to_console):
+        self.tunnel_name = tunnel_name
         self.server_host = server_host
         self.server_port = server_port
         self.server_key = server_key
@@ -95,6 +96,7 @@ class TunnelProcess(multiprocessing.Process):
         remote_host = defaults['remote_host']
         remote_port = int(defaults.get('remote_port', SSH_PORT))
         remote_port_to_forward = int(defaults.get('port', DEFAULT_PORT))
+        tunnel_name = defaults.get('tunnel_name', realpath(ini_file))
         key_file = defaults.get('keyfile')
         if key_file is None:
             raise Exception("Missing keyfile argument")
@@ -105,6 +107,6 @@ class TunnelProcess(multiprocessing.Process):
         if server_key is not None and not isabs(server_key):
             server_key = join(directory, server_key)
         keep_alive_time = int(defaults.get("keep_alive_time", 30))
-        tunnel_process = TunnelProcess(server_host, server_port, server_key, user_to_loging, key_file,
+        tunnel_process = TunnelProcess(tunnel_name, server_host, server_port, server_key, user_to_loging, key_file,
                                        remote_port_to_forward, remote_host, remote_port, None, keep_alive_time, log_level, log_to_console)
         return tunnel_process
