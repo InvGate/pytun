@@ -1,3 +1,4 @@
+import enum
 import smtplib
 from email.mime.text import MIMEText
 
@@ -6,16 +7,26 @@ from email_validator import validate_email
 from alerts.alert_sender import AlertSender
 
 
+
+class SecurityValues(enum.Enum):
+    none = "none"
+    tls = "tls"
+    ssl = "ssl"
+
 class EmailAlertSender(AlertSender):
+
 
     def __init__(self, host, login, password, to_address, logger, security=None, port=25, from_address = None):
         if from_address is None:
             from_address = login
         if security is not None:
-            if security not in ("none", "tls", "ssl"):
-                raise ValueError("Security can only be none, tls or ssl but %s was received", security)
+            if security not in SecurityValues.__members__:
+                raise ValueError("Security can only be none, tls or ssl but '%s' was received" % (security,))
+            else:
+                security = SecurityValues[security]
         else:
-            security = None
+            security = SecurityValues.none
+
         self.security = security
         self.port = port
         self.host = host
@@ -28,9 +39,9 @@ class EmailAlertSender(AlertSender):
     def send_alert(self, tunnel_name):
         try:
             message = self._build_message(tunnel_name)
-            smtp_class = smtplib.SMTP_SSL if self.security == 'ssl' else smtplib.SMTP
+            smtp_class = smtplib.SMTP_SSL if self.security == SecurityValues.ssl else smtplib.SMTP
             with smtp_class(self.host, self.port) as server:
-                if self.security == 'tls':
+                if self.security == SecurityValues.tls:
                     server.starttls()
                 server.login(self.login, self.password)
                 res = server.sendmail(
