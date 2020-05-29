@@ -27,10 +27,7 @@ class EmailAlertSender(AlertSender):
 
     def send_alert(self, tunnel_name):
         try:
-            message = MIMEText("This email is to let you know that Tunnel %s is down!"%tunnel_name, 'plain')
-            message["Subject"] = "Tunnel %s is down!"%tunnel_name
-            message["From"] = self.sender_email
-            message["To"] = self.receiver_email
+            message = self._build_message(tunnel_name)
             smtp_class = smtplib.SMTP_SSL if self.security == 'ssl' else smtplib.SMTP
             with smtp_class(self.host, self.port) as server:
                 if self.security == 'tls':
@@ -43,3 +40,10 @@ class EmailAlertSender(AlertSender):
                     self.logger.warning("It was not possible to send email: %s", res)
         except Exception as e:
             self.logger.exception("Failed to send email")
+
+    def _build_message(self, tunnel_name):
+        message = MIMEText("This email is to let you know that Tunnel %s is down!" % tunnel_name, 'plain')
+        message["Subject"] = "Tunnel %s is down!" % tunnel_name
+        message["From"] = self.sender_email
+        message["To"] = self.receiver_email
+        return message
