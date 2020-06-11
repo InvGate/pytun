@@ -7,8 +7,9 @@ from paramiko import SSHException
 
 class Tunnel(object):
 
-    def __init__(self, server_port, remote_host, remote_port, transport, logger, keep_alive_time=30,
+    def __init__(self, name, server_port, remote_host, remote_port, transport, logger, keep_alive_time=30,
                  alert_senders=None):
+        self.name = name
         self.timer = None
         self.server_port = server_port
         self.remote_host = remote_host
@@ -30,7 +31,7 @@ class Tunnel(object):
                     message = "Failed to Establish connection to %s:%d with error: %r" % (host, port, e)
                     for each in self.alert_senders:
                         try:
-                            each.send_alert(message=message)
+                            each.send_alert(self.name, message=message)
                         except Exception as e:
                             self.logger.exception("Failed to send alert: %r", e)
                 return
