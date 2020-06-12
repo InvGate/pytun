@@ -59,8 +59,8 @@ class EmailAlertSender(AlertSender):
         if message_text:
             message = MIMEText(message_text, 'plain')
         else:
-            message = MIMEText("This email is to let you know that Tunnel %s is down!" % tunnel_name, 'plain')
-        message["Subject"] = "Tunnel %s notification" % tunnel_name
+            message = MIMEText("This email is to let you know that Tunnel %s is down!" % (tunnel_name,), 'plain')
+        message["Subject"] = "Tunnel %s notification" % (tunnel_name,)
         message["From"] = self.sender_email
         message["To"] = self.receiver_email
         return message

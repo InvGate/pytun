@@ -3,8 +3,11 @@ import configparser
 import signal
 import sys
 import time
+from concurrent.futures.process import ProcessPoolExecutor
+from concurrent.futures.thread import ThreadPoolExecutor
 from multiprocessing import freeze_support
 from multiprocessing.pool import ThreadPool
+from multiprocessing import Queue
 from os import listdir
 from os.path import isabs, dirname, realpath
 from os.path import isfile, join
@@ -13,6 +16,7 @@ from socket import socket
 from paramiko import BadHostKeyException, PasswordRequiredException, AuthenticationException, SSHException
 
 from alerts.email_alert import EmailAlertSender
+from alerts.pooled_alerter import DifferentThreadAlert
 from configure_logger import configure_logger
 from tunnel_infra.TunnelProcess import TunnelProcess
 from tunnel_infra.pathtype import PathType
@@ -61,12 +65,14 @@ def main():
     if args.test_tunnels:
         test_tunnels_and_exit(files, logger, processes)
 
+
     if smtp_sender:
         senders = [smtp_sender]
-        pool = ThreadPool(1)
     else:
         senders = []
-        pool = None
+
+    pool = ThreadPoolExecutor(1)
+    main_sender = DifferentThreadAlert(senders, pool)
 
     start_tunnels(files, logger, processes, senders)
 
@@ -74,13 +80,14 @@ def main():
         logger.exception("No config files found")
         sys.exit(1)
 
+
     register_signal_handlers(processes, pool)
 
     while True:
         items = list(processes.items())
         to_restart = []
-        check_tunnels(files, items, logger, processes, senders, to_restart, pool)
-        restart_tunnels(files, logger, processes, to_restart)
+        check_tunnels(files, items, logger, processes, to_restart, main_sender)
+        restart_tunnels(files, logger, processes, to_restart, senders)
         time.sleep(30)
 
 
@@ -180,7 +187,7 @@ def test_mail_and_exit(logger, smtp_sender):
     sys.exit(0)
 
 
-def check_tunnels(files, items, logger, processes, senders, to_restart, pool):
+def check_tunnels(files, items, logger, processes, to_restart, pooled_sender):
 
     for key, proc in items:
         if (not proc.is_alive()) and proc.exitcode is not None:
@@ -188,29 +195,29 @@ def check_tunnels(files, items, logger, processes, senders, to_restart, pool):
             del processes[key]
             to_restart.append(key)
             logger.info("Tunnel %s is down", files[key])
-            for each in senders:
-                pool.apply(each.send_alert,  args=(proc.tunnel_name,))
+            pooled_sender.send_alert(proc.tunnel_name)
         else:
             logger.debug("Tunnel %s is up", files[key])
 
 
-def restart_tunnels(files, logger, processes, to_restart):
+def restart_tunnels(files, logger, processes, to_restart, alert_senders):
     for each in to_restart:
         logger.info("Going to restart tunnel from file %s", files[each])
-        tunnel_process = TunnelProcess.from_config_file(files[each], logger)
+        tunnel_process = TunnelProcess.from_config_file(files[each], alert_senders)
         processes[each] = tunnel_process
         tunnel_process.start()
-        logger.info("Tunnel from file %s has pid %s", files[each], tunnel_process.pid)
+        logger.info("Tunnel %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
 
 
-def register_signal_handlers(processes, pool):
+def register_signal_handlers(processes,pool):
     def exit_gracefully(*args, **kwargs):
+        if pool:
+            pool.shutdown()
         for each in processes.values():
             each.terminate()
         for each in processes.values():
             each.join()
-        if pool:
-            pool.terminate()
+
         sys.exit(0)
 
     signal.signal(signal.SIGINT, exit_gracefully)
