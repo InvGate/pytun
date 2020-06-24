@@ -51,7 +51,7 @@ class EmailAlertSender(AlertSender):
                 if res:
                     self.logger.warning("It was not possible to send email: %s", res)
         except Exception as e:
-            self.logger.exception("Failed to send email")
+            self.logger.exception("Failed to send email %s" % (e,))
             if exception_on_failure:
                 raise e
 
