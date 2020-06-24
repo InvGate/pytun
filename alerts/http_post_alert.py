@@ -15,8 +15,10 @@ class HTTPPostAlertSender(AlertSender):
         try:
             message = message or "Tunnel Down!"
             data = {'tunnel_name': tunnel_name, 'message':message}
-            requests.post(self.post_url, auth=(self.user, self.password), data=json.dumps(data))
+            auth_data = (self.user, self.password)
+            resp = requests.post(self.post_url, auth=auth_data, data=json.dumps(data))
+            resp.raise_for_status()
         except Exception as e:
-            self.logger.exception("Failed to post alert %v", e)
+            self.logger.exception("Failed to post alert %r", e)
             if exception_on_failure:
                 raise e

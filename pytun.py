@@ -3,11 +3,8 @@ import configparser
 import signal
 import sys
 import time
-from concurrent.futures.process import ProcessPoolExecutor
 from concurrent.futures.thread import ThreadPoolExecutor
 from multiprocessing import freeze_support
-from multiprocessing.pool import ThreadPool
-from multiprocessing import Queue
 from os import listdir
 from os.path import isabs, dirname, realpath
 from os.path import isfile, join
@@ -16,8 +13,9 @@ from socket import socket
 from paramiko import BadHostKeyException, PasswordRequiredException, AuthenticationException, SSHException
 
 from alerts.email_alert import EmailAlertSender
+from alerts.http_post_alert import HTTPPostAlertSender
 from alerts.pooled_alerter import DifferentThreadAlert
-from configure_logger import configure_logger
+from configure_logger import LogManager
 from tunnel_infra.TunnelProcess import TunnelProcess
 from tunnel_infra.pathtype import PathType
 
@@ -29,6 +27,8 @@ def main():
     parser.add_argument("--config_ini", dest="config_ini", help="Confiuration file to use", default="pytun.ini",
                         type=PathType(dash_ok=False))
     parser.add_argument("--test_smtp", dest="test_mail", help="Send a test email to validate the smtp config and exits",
+                        action='store_true', default=False)
+    parser.add_argument("--test_http", dest="test_http", help="Send a test post to validate the http config and exits",
                         action='store_true', default=False)
     parser.add_argument("--test_connections", dest="test_connections",
                         help="Test to connect to the exposed services for each tunnel", action='store_true',
@@ -46,12 +46,20 @@ def main():
 
     config.read(ini_path)
     params = config['pytun']
-    logger = configure_logger(params.get("log_level", "INFO"), params.get("log_to_console", False) or args.test_mail)
+    test_something = args.test_mail or args.test_http or args.test_connections or args.test_tunnels
+    log_filename = params.get("log_path", 'tunnel.log')
+    LogManager.filename = log_filename
+    logger = LogManager.configure_logger(params.get("log_level", "INFO"), params.get("log_to_console", False) or test_something)
     smtp_sender = get_smtp_alert_sender(logger, params)
 
     if args.test_mail:
         test_mail_and_exit(logger, smtp_sender)
 
+    post_sender = get_post_alert_sender(logger, params)
+
+    if args.test_http:
+        test_http_and_exit(logger, post_sender)
+        
     tunnel_path = params.get("tunnel_dirs", "configs")
     if not isabs(args.config_ini):
         tunnel_path = join(dirname(realpath(__file__)), tunnel_path)
@@ -65,11 +73,8 @@ def main():
     if args.test_tunnels:
         test_tunnels_and_exit(files, logger, processes)
 
+    senders = [x for x in [smtp_sender, post_sender] if x is not None]
 
-    if smtp_sender:
-        senders = [smtp_sender]
-    else:
-        senders = []
 
     pool = ThreadPoolExecutor(1)
     main_sender = DifferentThreadAlert(senders, pool)
@@ -187,6 +192,19 @@ def test_mail_and_exit(logger, smtp_sender):
     sys.exit(0)
 
 
+def test_http_and_exit(logger, post_sender):
+    if post_sender is None:
+        logger.error("No http config found!")
+        sys.exit(2)
+    try:
+        post_sender.send_alert("Testing post", message="Testing email", exception_on_failure=True)
+    except Exception as e:
+        logger.exception("Failed to send post %r", e)
+        sys.exit(1)
+    logger.info("HTTP post test success!")
+    sys.exit(0)
+
+
 def check_tunnels(files, items, logger, processes, to_restart, pooled_sender):
 
     for key, proc in items:
@@ -244,6 +262,17 @@ def create_tunnels_from_config(alert_senders, files, logger, processes):
             sys.exit(1)
         processes[each] = tunnel_process
 
+
+def get_post_alert_sender(logger, params):
+    if params.get("http_url"):
+        try:
+            post_sender = HTTPPostAlertSender(params['http_url'], params['http_user'], params['http_password'],logger)
+        except KeyError as e:
+            logger.exception("Missing smtp param %s" % e)
+            sys.exit(-1)
+    else:
+        post_sender = None
+    return post_sender
 
 def get_smtp_alert_sender(logger, params):
     if params.get("smtp_hostname"):

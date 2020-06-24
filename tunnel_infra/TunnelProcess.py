@@ -6,7 +6,7 @@ import sys
 import paramiko
 
 from .Tunnel import Tunnel
-from configure_logger import configure_logger
+from configure_logger import LogManager
 from os.path import isabs, dirname, realpath, join
 
 DEFAULT_KEEP_ALIVE_TIME = 30
@@ -44,7 +44,7 @@ class TunnelProcess(multiprocessing.Process):
         sys.exit(0)
 
     def run(self):
-        self.logger = configure_logger(self.log_level, self.log_to_console, name="pytun-tunnel")
+        self.logger = LogManager.configure_logger(self.log_level, self.log_to_console, name="pytun-tunnel")
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         client = self.ssh_connect()
