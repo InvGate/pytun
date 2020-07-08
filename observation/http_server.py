@@ -12,6 +12,9 @@ class RequestHandlerClassFactory:
     def get_handler(self, config_path, tunnel_manager_id, log_filename, status):
         class TunnelRequestHandler(SimpleHTTPRequestHandler):
 
+            server_version = "Pytun Introspection web server/1.0"
+            sys_version = "Python/3"
+
             def _zipdir(self,path, ziph):
                 # ziph is zipfile handle
                 for root, dirs, files in os.walk(path):
