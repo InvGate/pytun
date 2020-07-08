@@ -244,7 +244,7 @@ def restart_tunnels(files, logger, processes, to_restart, alert_senders, status)
         tunnel_process = TunnelProcess.from_config_file(files[each], alert_senders)
         processes[each] = tunnel_process
         tunnel_process.start()
-        status.start_tunnel(each)
+        status.start_tunnel(files[each])
         logger.info("Tunnel %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
 
 
@@ -267,7 +267,7 @@ def start_tunnels(files, logger, processes, alert_senders, status):
     create_tunnels_from_config(alert_senders, files, logger, processes)
     for key, tunnel_process in processes.items():
         tunnel_process.start()
-        status.start_tunnel(key)
+        status.start_tunnel(files[key])
         logger.info("Tunnel %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
 
 
