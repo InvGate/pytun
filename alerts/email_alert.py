@@ -17,7 +17,8 @@ class SecurityValues(enum.Enum):
 
 class EmailAlertSender(AlertSender):
 
-    def __init__(self, host, login, password, to_address, logger, security=None, port=25, from_address = None):
+    def __init__(self, tunnel_manager_id, host, login, password, to_address, logger, security=None, port=25, from_address = None):
+        self.tunnel_manager_id = tunnel_manager_id
         if from_address is None:
             from_address = login
         if security is not None:
@@ -59,7 +60,7 @@ class EmailAlertSender(AlertSender):
         if message_text:
             message = MIMEText(message_text, 'plain')
         else:
-            message = MIMEText("This email is to let you know that Tunnel %s is down!" % (tunnel_name,), 'plain')
+            message = MIMEText("This email is to let you know that %s is down! Manager id: %s" % (tunnel_name,self.tunnel_manager_id), 'plain')
         message["Subject"] = "Tunnel %s notification" % (tunnel_name,)
         message["From"] = self.sender_email
         message["To"] = self.receiver_email

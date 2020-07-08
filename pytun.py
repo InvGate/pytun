@@ -2,6 +2,7 @@ import argparse
 import configparser
 import signal
 import sys
+import threading
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
 from multiprocessing import freeze_support
@@ -16,6 +17,8 @@ from alerts.email_alert import EmailAlertSender
 from alerts.http_post_alert import HTTPPostAlertSender
 from alerts.pooled_alerter import DifferentThreadAlert
 from configure_logger import LogManager
+from observation.http_server import inspection_http_server
+from observation.status import Status
 from tunnel_infra.TunnelProcess import TunnelProcess
 from tunnel_infra.pathtype import PathType
 
@@ -48,19 +51,24 @@ def main():
     params = config['pytun']
     test_something = args.test_mail or args.test_http or args.test_connections or args.test_tunnels
     log_filename = params.get("log_path", 'tunnel.log')
+    tunnel_manager_id = params.get("tunnel_manager_id", None)
     LogManager.filename = log_filename
     logger = LogManager.configure_logger(params.get("log_level", "INFO"), params.get("log_to_console", False) or test_something)
-    smtp_sender = get_smtp_alert_sender(logger, params)
+    if tunnel_manager_id is None:
+        logger.error("tunnel_manager_id not set in the config file")
+        sys.exit(1)
+    smtp_sender = get_smtp_alert_sender(logger, tunnel_manager_id, params)
 
     if args.test_mail:
         test_mail_and_exit(logger, smtp_sender)
 
-    post_sender = get_post_alert_sender(logger, params)
+    post_sender = get_post_alert_sender(logger, tunnel_manager_id, params)
 
     if args.test_http:
         test_http_and_exit(logger, post_sender)
         
     tunnel_path = params.get("tunnel_dirs", "configs")
+
     if not isabs(args.config_ini):
         tunnel_path = join(dirname(realpath(__file__)), tunnel_path)
 
@@ -75,25 +83,37 @@ def main():
 
     senders = [x for x in [smtp_sender, post_sender] if x is not None]
 
-
     pool = ThreadPoolExecutor(1)
     main_sender = DifferentThreadAlert(senders, pool)
 
-    start_tunnels(files, logger, processes, senders)
+    status = Status()
+
+    start_tunnels(files, logger, processes, senders, status)
 
     if len(processes) == 0:
         logger.exception("No config files found")
         sys.exit(1)
 
-
     register_signal_handlers(processes, pool)
+
+    http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, log_filename, status, int(params.get('inspection_port')))
+    http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
+    http_inspection_thread.daemon = True
+    http_inspection_thread.start()
+
 
     while True:
         items = list(processes.items())
         to_restart = []
         check_tunnels(files, items, logger, processes, to_restart, main_sender)
-        restart_tunnels(files, logger, processes, to_restart, senders)
+        restart_tunnels(files, logger, processes, to_restart, senders, status)
+        if not http_inspection_thread.isAlive():
+            http_inspection_thread.join()
+            http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
+            http_inspection_thread.daemon = True
+            http_inspection_thread.start()
         time.sleep(30)
+
 
 
 def test_tunnels_and_exit(files, logger, processes):
@@ -218,12 +238,13 @@ def check_tunnels(files, items, logger, processes, to_restart, pooled_sender):
             logger.debug("Tunnel %s is up", files[key])
 
 
-def restart_tunnels(files, logger, processes, to_restart, alert_senders):
+def restart_tunnels(files, logger, processes, to_restart, alert_senders, status):
     for each in to_restart:
         logger.info("Going to restart tunnel from file %s", files[each])
         tunnel_process = TunnelProcess.from_config_file(files[each], alert_senders)
         processes[each] = tunnel_process
         tunnel_process.start()
+        status.start_tunnel(each)
         logger.info("Tunnel %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
 
 
@@ -242,10 +263,11 @@ def register_signal_handlers(processes,pool):
     signal.signal(signal.SIGTERM, exit_gracefully)
 
 
-def start_tunnels(files, logger, processes, alert_senders):
+def start_tunnels(files, logger, processes, alert_senders, status):
     create_tunnels_from_config(alert_senders, files, logger, processes)
     for key, tunnel_process in processes.items():
         tunnel_process.start()
+        status.start_tunnel(key)
         logger.info("Tunnel %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
 
 
@@ -263,10 +285,10 @@ def create_tunnels_from_config(alert_senders, files, logger, processes):
         processes[each] = tunnel_process
 
 
-def get_post_alert_sender(logger, params):
+def get_post_alert_sender(logger, tunnel_manager_id, params):
     if params.get("http_url"):
         try:
-            post_sender = HTTPPostAlertSender(params['http_url'], params['http_user'], params['http_password'],logger)
+            post_sender = HTTPPostAlertSender(tunnel_manager_id, params['http_url'], params['http_user'], params['http_password'],logger)
         except KeyError as e:
             logger.exception("Missing smtp param %s" % e)
             sys.exit(-1)
@@ -274,10 +296,10 @@ def get_post_alert_sender(logger, params):
         post_sender = None
     return post_sender
 
-def get_smtp_alert_sender(logger, params):
+def get_smtp_alert_sender(logger, tunnel_manager_id, params):
     if params.get("smtp_hostname"):
         try:
-            smtp_sender = EmailAlertSender(params['smtp_hostname'], params['smtp_login'], params['smtp_password'],
+            smtp_sender = EmailAlertSender(tunnel_manager_id, params['smtp_hostname'], params['smtp_login'], params['smtp_password'],
                                            params['smtp_to'], logger,
                                            port=params.get('smtp_port', 25), from_address=params.get('smtp_from'),
                                            security=params.get("smtp_security"))
