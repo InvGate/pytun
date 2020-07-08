@@ -35,44 +35,54 @@ class RequestHandlerClassFactory:
                     self.end_headers()
                     self.wfile.write(json_str.encode(encoding='utf_8'))
                 except Exception as e:
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"error": str(e), "tunnel_manager_id":tunnel_manager_id}).encode(encoding='utf_8'))
+                    self.return_error(e)
+
+            def return_error(self, e):
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(
+                    json.dumps({"error": str(e), "tunnel_manager_id": tunnel_manager_id}).encode(encoding='utf_8'))
 
             def handle_configs(self):
-                temp_dir = tempfile.gettempdir()
-                zipf = zipfile.ZipFile(os.path.join(temp_dir, 'configs.zip'), 'w', zipfile.ZIP_DEFLATED)
-                self._zipdir(config_path, zipf)
-                zipf.close()
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-type", 'application/zip')
-                with open(os.path.join(temp_dir, 'configs.zip'), 'rb') as f:
-                    fs = os.fstat(f.fileno())
-                    self.send_header("Content-Length", str(fs[6]))
-                    self.send_header("Last-Modified", self.date_time_string(fs.st_mtime))
-                    self.end_headers()
-                    self.copyfile(f, self.wfile)
+                try:
+                    temp_dir = tempfile.gettempdir()
+                    zipf = zipfile.ZipFile(os.path.join(temp_dir, 'configs.zip'), 'w', zipfile.ZIP_DEFLATED)
+                    self._zipdir(config_path, zipf)
+                    zipf.close()
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header("Content-type", 'application/zip')
+                    with open(os.path.join(temp_dir, 'configs.zip'), 'rb') as f:
+                        fs = os.fstat(f.fileno())
+                        self.send_header("Content-Length", str(fs[6]))
+                        self.send_header("Last-Modified", self.date_time_string(fs.st_mtime))
+                        self.end_headers()
+                        self.copyfile(f, self.wfile)
+                except Exception as e:
+                    self.return_error(e)
 
             def handle_status(self):
                 res = status.to_dict()
                 return res
 
             def handle_logs(self):
-                temp_dir = tempfile.gettempdir()
-                temp_path = os.path.join(temp_dir, 'log.txt')
-                shutil.copy2(log_filename, temp_path)
-                zipf = zipfile.ZipFile(os.path.join(temp_dir, 'logs.zip'), 'w', zipfile.ZIP_DEFLATED)
-                zipf.write(temp_path)
-                zipf.close()
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-type", 'application/zip')
-                with open(os.path.join(temp_dir, 'logs.zip'), 'rb') as f:
-                    fs = os.fstat(f.fileno())
-                    self.send_header("Content-Length", str(fs[6]))
-                    self.send_header("Last-Modified", self.date_time_string(fs.st_mtime))
-                    self.end_headers()
-                    self.copyfile(f, self.wfile)
+                try:
+                    temp_dir = tempfile.gettempdir()
+                    temp_path = os.path.join(temp_dir, 'log.txt')
+                    shutil.copy2(log_filename, temp_path)
+                    zipf = zipfile.ZipFile(os.path.join(temp_dir, 'logs.zip'), 'w', zipfile.ZIP_DEFLATED)
+                    zipf.write(temp_path)
+                    zipf.close()
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header("Content-type", 'application/zip')
+                    with open(os.path.join(temp_dir, 'logs.zip'), 'rb') as f:
+                        fs = os.fstat(f.fileno())
+                        self.send_header("Content-Length", str(fs[6]))
+                        self.send_header("Last-Modified", self.date_time_string(fs.st_mtime))
+                        self.end_headers()
+                        self.copyfile(f, self.wfile)
+                except Exception as e:
+                    self.return_error(e)
 
             def handle_ping(self):
                 return {'status':'ok'}
