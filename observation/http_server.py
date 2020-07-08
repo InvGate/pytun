@@ -62,9 +62,12 @@ class RequestHandlerClassFactory:
                 temp_dir = tempfile.gettempdir()
                 temp_path = os.path.join(temp_dir, 'log.txt')
                 shutil.copy2(log_filename, temp_path)
+                zipf = zipfile.ZipFile(os.path.join(temp_dir, 'logs.zip'), 'w', zipfile.ZIP_DEFLATED)
+                zipf.write(temp_path)
+                zipf.close()
                 self.send_response(HTTPStatus.OK)
-                self.send_header("Content-type", 'text/plain')
-                with open(log_filename, 'rb') as f:
+                self.send_header("Content-type", 'application/zip')
+                with open(os.path.join(temp_dir, 'logs.zip'), 'rb') as f:
                     fs = os.fstat(f.fileno())
                     self.send_header("Content-Length", str(fs[6]))
                     self.send_header("Last-Modified", self.date_time_string(fs.st_mtime))
