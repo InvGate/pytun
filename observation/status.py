@@ -15,9 +15,9 @@ class Status:
                 self.status_data[tunnel_name]['started_times'] += 1
             else:
                 self.status_data[tunnel_name] = {'started_times': 1}
-            self.status_data[tunnel_name]['last_start'] = str(datetime.datetime.now())
+            self.status_data[tunnel_name]['last_start'] = datetime.datetime.now().timestamp()
 
     def to_dict(self):
         with self.rlock:
-            return {'created_at': str(self.created_at),
+            return {'created_at': self.created_at.timestamp(),
                     'status_data': self.status_data}
