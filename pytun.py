@@ -99,7 +99,7 @@ def main():
 
     register_signal_handlers(processes, pool)
 
-    http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, status, int(params.get('inspection_port')))
+    http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, status, int(params.get('inspection_port')), logger)
     http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
     http_inspection_thread.daemon = True
     http_inspection_thread.start()

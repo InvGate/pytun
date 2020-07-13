@@ -93,7 +93,7 @@ class RequestHandlerClassFactory:
         return TunnelRequestHandler
 
 
-def inspection_http_server(config_path, tunnel_manager_id, log_path, status, port, looger):
-    handler_class = RequestHandlerClassFactory().get_handler(config_path, tunnel_manager_id, log_path, status, looger)
+def inspection_http_server(config_path, tunnel_manager_id, log_path, status, port, logger):
+    handler_class = RequestHandlerClassFactory().get_handler(config_path, tunnel_manager_id, log_path, status, logger)
     http_server = HTTPServer(("127.0.0.1", port), handler_class)
     return http_server
