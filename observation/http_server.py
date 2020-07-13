@@ -3,7 +3,10 @@ import shutil
 import tempfile
 import zipfile
 from http import HTTPStatus
-from http.server import HTTPServer
+try:
+    from http.server import ThreadingHTTPServer as HttpServer
+except ImportError:
+    from http.server import HTTPServer as HttpServer
 from http.server import SimpleHTTPRequestHandler
 import json
 
@@ -96,5 +99,5 @@ class RequestHandlerClassFactory:
 def inspection_http_server(config_path, tunnel_manager_id, log_path, status, port, logger, only_local=True):
     handler_class = RequestHandlerClassFactory().get_handler(config_path, tunnel_manager_id, log_path, status, logger)
     address = ("127.0.0.1" if only_local else "0.0.0.0", port)
-    http_server = HTTPServer(address, handler_class)
+    http_server = HttpServer(address, handler_class)
     return http_server

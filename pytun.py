@@ -2,7 +2,6 @@ import argparse
 import configparser
 import signal
 import sys
-import os
 import threading
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -110,7 +109,7 @@ def main():
         to_restart = []
         check_tunnels(files, items, logger, processes, to_restart, main_sender)
         restart_tunnels(files, logger, processes, to_restart, senders, status)
-        if not http_inspection_thread.isAlive():
+        if not http_inspection_thread.is_alive():
             http_inspection_thread.join()
             http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
             http_inspection_thread.daemon = True
