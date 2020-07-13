@@ -2,6 +2,7 @@ import argparse
 import configparser
 import signal
 import sys
+import os
 import threading
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -50,10 +51,12 @@ def main():
     config.read(ini_path)
     params = config['pytun']
     test_something = args.test_mail or args.test_http or args.test_connections or args.test_tunnels
-    log_filename = params.get("log_path", 'tunnel.log')
     tunnel_manager_id = params.get("tunnel_manager_id", None)
-    LogManager.filename = log_filename
-    logger = LogManager.configure_logger(params.get("log_level", "INFO"), params.get("log_to_console", False) or test_something)
+    log_path = params.get("log_path", './')
+    if not isabs(log_path):
+        log_path = join(dirname(realpath(__file__)), log_path)
+    LogManager.path = log_path
+    logger = LogManager.configure_logger('main_tunnel.log', params.get("log_level", "INFO"), params.get("log_to_console", False) or test_something)
     if tunnel_manager_id is None:
         logger.error("tunnel_manager_id not set in the config file")
         sys.exit(1)
@@ -96,7 +99,7 @@ def main():
 
     register_signal_handlers(processes, pool)
 
-    http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, log_filename, status, int(params.get('inspection_port')))
+    http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, status, int(params.get('inspection_port')))
     http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
     http_inspection_thread.daemon = True
     http_inspection_thread.start()

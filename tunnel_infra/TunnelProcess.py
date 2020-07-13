@@ -1,5 +1,6 @@
 import configparser
 import multiprocessing
+import os
 import signal
 import sys
 
@@ -18,7 +19,10 @@ DEFAULT_PORT = 4000
 class TunnelProcess(multiprocessing.Process):
 
     def __init__(self, tunnel_name, server_host, server_port, server_key, user_to_login, key_file, remote_port_to_forward,
-                 remote_host, remote_port, keep_alive_time, log_level, log_to_console, alert_senders=None):
+                 remote_host, remote_port, keep_alive_time, log_level, log_to_console, alert_senders=None, log_filename=None):
+        if log_filename is None:
+            log_filename = os.path.splitext(os.path.basename(tunnel_name))[0] + ".log"
+        self.log_filename = log_filename
         self.tunnel_name = tunnel_name
         self.server_host = server_host
         self.server_port = server_port
@@ -44,7 +48,7 @@ class TunnelProcess(multiprocessing.Process):
         sys.exit(0)
 
     def run(self):
-        self.logger = LogManager.configure_logger(self.log_level, self.log_to_console, name="pytun-tunnel")
+        self.logger = LogManager.configure_logger(self.log_filename, self.log_level, self.log_to_console, name="pytun-tunnel")
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         client = self.ssh_connect()
@@ -108,6 +112,8 @@ class TunnelProcess(multiprocessing.Process):
         remote_port = int(defaults.get('remote_port', SSH_PORT))
         remote_port_to_forward = int(defaults.get('port', DEFAULT_PORT))
         tunnel_name = defaults.get('tunnel_name', realpath(ini_file))
+        log_filename = os.path.basename(ini_file)
+        log_filename = os.path.splitext(log_filename)[0] + ".log"
         key_file = defaults.get('keyfile')
         if key_file is None:
             raise Exception("Missing keyfile argument")
@@ -120,5 +126,5 @@ class TunnelProcess(multiprocessing.Process):
         keep_alive_time = int(defaults.get("keep_alive_time", DEFAULT_KEEP_ALIVE_TIME))
         tunnel_process = TunnelProcess(tunnel_name, server_host, server_port, server_key, user_to_login, key_file,
                                        remote_port_to_forward, remote_host, remote_port, keep_alive_time, log_level,
-                                       log_to_console, alert_senders=alert_senders)
+                                       log_to_console, alert_senders=alert_senders, log_filename=log_filename)
         return tunnel_process
