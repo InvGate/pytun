@@ -9,7 +9,7 @@ import json
 
 class RequestHandlerClassFactory:
 
-    def get_handler(self, config_path, tunnel_manager_id, log_path, status):
+    def get_handler(self, config_path, tunnel_manager_id, log_path, status, logger):
         class TunnelRequestHandler(SimpleHTTPRequestHandler):
 
             server_version = "Pytun Introspection web server/1.0"
@@ -39,6 +39,7 @@ class RequestHandlerClassFactory:
                     self.end_headers()
                     self.wfile.write(json_str.encode(encoding='utf_8'))
                 except Exception as e:
+                    logger.exception("Error processing HTTP Request %s: %s" % (self.path, e))
                     self.return_error(e)
 
             def return_error(self, e):
@@ -92,7 +93,7 @@ class RequestHandlerClassFactory:
         return TunnelRequestHandler
 
 
-def inspection_http_server(config_path, tunnel_manager_id, log_path, status, port):
-    handler_class = RequestHandlerClassFactory().get_handler(config_path, tunnel_manager_id, log_path, status)
+def inspection_http_server(config_path, tunnel_manager_id, log_path, status, port, looger):
+    handler_class = RequestHandlerClassFactory().get_handler(config_path, tunnel_manager_id, log_path, status, looger)
     http_server = HTTPServer(("127.0.0.1", port), handler_class)
     return http_server
