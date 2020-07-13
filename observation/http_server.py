@@ -9,17 +9,18 @@ import json
 
 class RequestHandlerClassFactory:
 
-    def get_handler(self, config_path, tunnel_manager_id, log_filename, status):
+    def get_handler(self, config_path, tunnel_manager_id, log_path, status):
         class TunnelRequestHandler(SimpleHTTPRequestHandler):
 
             server_version = "Pytun Introspection web server/1.0"
             sys_version = "Python/3"
 
-            def _zipdir(self,path, ziph):
+            def _zipdir(self,path, ziph, filter_callable=None):
                 # ziph is zipfile handle
                 for root, dirs, files in os.walk(path):
                     for file in files:
-                        ziph.write(os.path.join(root, file))
+                        if filter_callable is None or filter_callable(file):
+                            ziph.write(os.path.join(root, file))
 
             def do_GET(self):
                 try:
@@ -71,10 +72,8 @@ class RequestHandlerClassFactory:
             def handle_logs(self):
                 try:
                     temp_dir = tempfile.gettempdir()
-                    temp_path = os.path.join(temp_dir, 'log.txt')
-                    shutil.copy2(log_filename, temp_path)
                     zipf = zipfile.ZipFile(os.path.join(temp_dir, 'logs.zip'), 'w', zipfile.ZIP_DEFLATED)
-                    zipf.write(temp_path)
+                    self._zipdir(log_path, zipf, lambda path: path.endswith(".log"))
                     zipf.close()
                     self.send_response(HTTPStatus.OK)
                     self.send_header("Content-type", 'application/zip')
@@ -93,7 +92,7 @@ class RequestHandlerClassFactory:
         return TunnelRequestHandler
 
 
-def inspection_http_server(config_path, tunnel_manager_id, log_filename, status, port):
-    handler_class = RequestHandlerClassFactory().get_handler(config_path, tunnel_manager_id, log_filename, status)
+def inspection_http_server(config_path, tunnel_manager_id, log_path, status, port):
+    handler_class = RequestHandlerClassFactory().get_handler(config_path, tunnel_manager_id, log_path, status)
     http_server = HTTPServer(("127.0.0.1", port), handler_class)
     return http_server
