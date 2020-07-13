@@ -99,7 +99,7 @@ def main():
 
     register_signal_handlers(processes, pool)
 
-    http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, status, int(params.get('inspection_port')), logger)
+    http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, status, params.getint('inspection_port'), logger, only_local=bool(params.getboolean('inspection_localhost_only',True)))
     http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
     http_inspection_thread.daemon = True
     http_inspection_thread.start()
@@ -304,7 +304,7 @@ def get_smtp_alert_sender(logger, tunnel_manager_id, params):
         try:
             smtp_sender = EmailAlertSender(tunnel_manager_id, params['smtp_hostname'], params['smtp_login'], params['smtp_password'],
                                            params['smtp_to'], logger,
-                                           port=params.get('smtp_port', 25), from_address=params.get('smtp_from'),
+                                           port=params.getint('smtp_port', 25), from_address=params.get('smtp_from'),
                                            security=params.get("smtp_security"))
         except KeyError as e:
             logger.exception("Missing smtp param %s" % e)
