@@ -88,6 +88,7 @@ class TunnelProcess(multiprocessing.Process):
                 username=self.user_to_login,
                 key_filename=self.key_file,
                 look_for_keys=False,
+                allow_agent=False,
                 timeout=10
             )
         except Exception as e:
