@@ -55,7 +55,7 @@ def main():
     if not isabs(log_path):
         log_path = join(dirname(realpath(__file__)), log_path)
     LogManager.path = log_path
-    logger = LogManager.configure_logger('main_tunnel.log', params.get("log_level", "INFO"), params.get("log_to_console", False) or test_something)
+    logger = LogManager.configure_logger('main_tunnel.log', params.get("log_level", "INFO"), params.getboolean("log_to_console", False) or test_something)
     if tunnel_manager_id is None:
         logger.error("tunnel_manager_id not set in the config file")
         sys.exit(1)
