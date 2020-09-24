@@ -18,7 +18,7 @@ class Tunnel(object):
         self.logger = logger
         self.keep_alive_time = keep_alive_time
         self.alert_senders = alert_senders
-
+        self.failed = False
 
     def handler(self, chan, host, port):
         with socket.socket() as sock:
@@ -66,15 +66,18 @@ class Tunnel(object):
             self.transport.send_ignore()
         except Exception as e:
             self.logger.exception("Tunnel down! %s", e)
+            self.failed=True
             return
         if not self.transport.is_active():
             self.logger.exception("Tunnel down! Transport is not active")
+            self.failed = True
             return
         try:
             chn = self.transport.open_session(timeout=30)
             chn.close()
-        except SSHException as e:
+        except Exception as e:
             self.logger.exception("Tunnel down! Failed to start a check session %s with timeout 30 seconds", e)
+            self.failed = True
             return
         self.timer = threading.Timer(self.keep_alive_time, self.validate_tunnel_up)
         self.timer.start()
@@ -84,7 +87,9 @@ class Tunnel(object):
         self.timer = threading.Timer(30, self.validate_tunnel_up)
         self.timer.start()
         while True:
-            chan = self.transport.accept(1000)
+            chan = self.transport.accept(10)
+            if self.failed:
+                return
             if chan is None:
                 continue
             thr = threading.Thread(
