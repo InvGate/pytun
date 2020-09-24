@@ -15,7 +15,7 @@ class LogManager:
         if name != "pytun":
             paramiko_log = logging.getLogger("paramiko")
             loggers.append(paramiko_log)
-        log_handler = TimedRotatingFileHandler(filename=os.path.join(LogManager.path, filename), when="midnight")
+        log_handler = TimedRotatingFileHandler(filename=os.path.join(LogManager.path, filename), when="midnight", backupCount=30)
         log_formatter = logging.Formatter('%(asctime)s %(process)d %(name)-12s %(levelname)-8s %(message)s')
         log_handler.setFormatter(log_formatter)
         log_handler.setLevel(level)
