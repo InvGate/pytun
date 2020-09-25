@@ -22,6 +22,11 @@ class RequestHandlerClassFactory:
 
             def _zipdir(self, path, ziph, filter_callable=None):
                 # ziph is zipfile handle
+                path = os.path.normpath(path)
+                # Hack: os.walk was not working if the path started with "\\?\"
+                if path.startswith("\\\\?\\"):
+                    path = path.replace("\\\\?\\", "")
+                logger.debug("going to walk " + path)
                 for root, dirs, files in os.walk(path):
                     for file in files:
                         if filter_callable is None or filter_callable(file):
