@@ -1,8 +1,8 @@
 import os
-import shutil
 import tempfile
 import zipfile
 from http import HTTPStatus
+
 try:
     from http.server import ThreadingHTTPServer as HttpServer
 except ImportError:
@@ -10,15 +10,17 @@ except ImportError:
 from http.server import SimpleHTTPRequestHandler
 import json
 
+
 class RequestHandlerClassFactory:
 
-    def get_handler(self, config_path, tunnel_manager_id, log_path, status, logger):
+    def get_handler(self, config_path, tunnel_manager_id, log_path, status, version_string, logger):
         class TunnelRequestHandler(SimpleHTTPRequestHandler):
 
-            server_version = "Pytun Introspection web server/1.0"
+            server_version = "Pytun Introspection web server/" + version_string
             sys_version = "Python/3"
+            pytun_Version = version_string
 
-            def _zipdir(self,path, ziph, filter_callable=None):
+            def _zipdir(self, path, ziph, filter_callable=None):
                 # ziph is zipfile handle
                 for root, dirs, files in os.walk(path):
                     for file in files:
@@ -77,7 +79,7 @@ class RequestHandlerClassFactory:
                 try:
                     temp_dir = tempfile.gettempdir()
                     zipf = zipfile.ZipFile(os.path.join(temp_dir, 'logs.zip'), 'w', zipfile.ZIP_DEFLATED)
-                    self._zipdir(log_path, zipf, lambda path: path.endswith(".log"))
+                    self._zipdir(log_path, zipf, lambda path: ".log" in path)
                     zipf.close()
                     self.send_response(HTTPStatus.OK)
                     self.send_header("Content-type", 'application/zip')
@@ -91,13 +93,15 @@ class RequestHandlerClassFactory:
                     self.return_error(e)
 
             def handle_ping(self):
-                return {'status':'ok'}
+                return {'status': 'ok', "version": self.pytun_Version}
 
         return TunnelRequestHandler
 
 
-def inspection_http_server(config_path, tunnel_manager_id, log_path, status, port, logger, only_local=True):
-    handler_class = RequestHandlerClassFactory().get_handler(config_path, tunnel_manager_id, log_path, status, logger)
+def inspection_http_server(config_path, tunnel_manager_id, log_path, status, version_string, port, logger,
+                           only_local=True):
+    handler_class = RequestHandlerClassFactory().get_handler(config_path, tunnel_manager_id, log_path, status,
+                                                             version_string, logger)
     address = ("127.0.0.1" if only_local else "0.0.0.0", port)
     http_server = HttpServer(address, handler_class)
     return http_server
