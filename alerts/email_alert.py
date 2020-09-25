@@ -19,6 +19,7 @@ class EmailAlertSender(AlertSender):
 
     def __init__(self, tunnel_manager_id, host, login, password, to_address, logger, security=None, port=25, from_address = None):
         self.tunnel_manager_id = tunnel_manager_id
+        logger.info("Creating email sender with parameters" + str((tunnel_manager_id, host, login, password, to_address, security, port, from_address)))
         if from_address is None:
             from_address = login
         if security is not None:
@@ -42,9 +43,11 @@ class EmailAlertSender(AlertSender):
         try:
             message = self._build_message(tunnel_name, message)
             smtp_class = smtplib.SMTP_SSL if self.security == SecurityValues.ssl else smtplib.SMTP
+
             with smtp_class(self.host, self.port, timeout=SMTP_CONNECTION_TIMEOUT) as server:
                 if self.security == SecurityValues.tls:
                     server.starttls()
+
                 server.login(self.login, self.password)
                 res = server.sendmail(
                     self.sender_email, self.receiver_email, message.as_string()
