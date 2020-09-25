@@ -21,7 +21,7 @@ from observation.http_server import inspection_http_server
 from observation.status import Status
 from tunnel_infra.TunnelProcess import TunnelProcess
 from tunnel_infra.pathtype import PathType
-
+from version import __version__
 freeze_support()
 
 
@@ -39,7 +39,7 @@ def main():
     parser.add_argument("--test_tunnels", dest="test_tunnels",
                         help="Test to establish each one of the tunnels", action='store_true',
                         default=False)
-
+    parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + __version__)
     args = parser.parse_args()
     config = configparser.ConfigParser()
     if not isabs(args.config_ini):
@@ -98,7 +98,7 @@ def main():
 
     register_signal_handlers(processes, pool)
 
-    http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, status, params.getint('inspection_port'), logger, only_local=bool(params.getboolean('inspection_localhost_only',True)))
+    http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, status, __version__, params.getint('inspection_port'), logger, only_local=bool(params.getboolean('inspection_localhost_only',True)))
     http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
     http_inspection_thread.daemon = True
     http_inspection_thread.start()
