@@ -54,6 +54,9 @@ def main():
     log_path = params.get("log_path", './')
     if not isabs(log_path):
         log_path = join(dirname(realpath(__file__)), log_path)
+        # Hack: sometimes when running on windows with pyinstaller and shawl a "\\?\" is added to cwd and it fails
+        if log_path.startswith("\\\\?\\"):
+            log_path = log_path.replace("\\\\?\\", "")
     LogManager.path = log_path
     logger = LogManager.configure_logger('main_tunnel.log', params.get("log_level", "INFO"), params.getboolean("log_to_console", False) or test_something)
     if tunnel_manager_id is None:
@@ -73,6 +76,10 @@ def main():
 
     if not isabs(args.config_ini):
         tunnel_path = join(dirname(realpath(__file__)), tunnel_path)
+        # Hack: sometimes when running on windows with pyinstaller and shawl a "\\?\" is added to cwd and it fails
+        if tunnel_path.startswith("\\\\?\\"):
+            tunnel_path = tunnel_path.replace("\\\\?\\", "")
+
 
     files = [join(tunnel_path, f) for f in listdir(tunnel_path) if isfile(join(tunnel_path, f)) and f[-4:] == '.ini']
     processes = {}
@@ -301,7 +308,7 @@ def get_post_alert_sender(logger, tunnel_manager_id, params):
 def get_smtp_alert_sender(logger, tunnel_manager_id, params):
     if params.get("smtp_hostname"):
         try:
-            smtp_sender = EmailAlertSender(tunnel_manager_id, params['smtp_hostname'], params['smtp_login'], params['smtp_password'],
+            smtp_sender = EmailAlertSender(tunnel_manager_id, params['smtp_hostname'], params.get('smtp_login',None), params.get('smtp_password', None),
                                            params['smtp_to'], logger,
                                            port=params.getint('smtp_port', 25), from_address=params.get('smtp_from'),
                                            security=params.get("smtp_security"))
