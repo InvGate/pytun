@@ -47,8 +47,8 @@ class EmailAlertSender(AlertSender):
             with smtp_class(self.host, self.port, timeout=SMTP_CONNECTION_TIMEOUT) as server:
                 if self.security == SecurityValues.tls:
                     server.starttls()
-
-                server.login(self.login, self.password)
+                if self.login:
+                    server.login(self.login, self.password)
                 res = server.sendmail(
                     self.sender_email, self.receiver_email, message.as_string()
                 )
