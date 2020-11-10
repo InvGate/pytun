@@ -1,7 +1,12 @@
+import configparser
 import os
 import tempfile
 import zipfile
+from concurrent.futures.thread import ThreadPoolExecutor
 from http import HTTPStatus
+from os.path import realpath
+
+from observation.connection_check import ConnectionCheck
 
 try:
     from http.server import ThreadingHTTPServer as HttpServer
@@ -78,6 +83,7 @@ class RequestHandlerClassFactory:
 
             def handle_status(self):
                 res = status.to_dict()
+                res.update(self.add_services_status())
                 return res
 
             def handle_logs(self):
@@ -96,6 +102,35 @@ class RequestHandlerClassFactory:
                         self.copyfile(f, self.wfile)
                 except Exception as e:
                     self.return_error(e)
+
+            def add_services_status(self):
+                res = {}
+                path = config_path
+                if path.startswith("\\\\?\\"):
+                    path = path.replace("\\\\?\\", "")
+                connection_checker = ConnectionCheck(logger)
+                pool = ThreadPoolExecutor(4)
+                jobs = {}
+                for root, dirs, files in os.walk(path):
+                    for file in files:
+                        if file[-4:] == ".ini":
+                            try:
+                                config = configparser.ConfigParser()
+                                config.read(os.path.join(path, file))
+                                defaults = config['tunnel']
+                                remote_host = defaults['remote_host']
+                                remote_port = int(defaults.get('remote_port'))
+                                tunnel_name = defaults.get('tunnel_name', realpath(file))
+                                res[tunnel_name] = {'remote_host':remote_host, 'remote_port':remote_port}
+                                jobs[tunnel_name] = pool.submit(connection_checker.test_connection, tunnel_name, remote_host, remote_port)
+                            except Exception as e:
+                                logger.exception("Error getting status for %s" % (file,))
+                                continue
+                    for name, job_future in jobs.items():
+                        res[name]['status'] = job_future.result()
+                pool.shutdown()
+                return res
+
 
             def handle_ping(self):
                 return {'status': 'ok', "version": self.pytun_Version}

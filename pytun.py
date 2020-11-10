@@ -1,6 +1,8 @@
 import argparse
 import configparser
+import os
 import signal
+import socket
 import sys
 import threading
 import time
@@ -9,19 +11,22 @@ from multiprocessing import freeze_support
 from os import listdir
 from os.path import isabs, dirname, realpath
 from os.path import isfile, join
-from socket import socket
-
+import coloredlogs
+from colorama import init
 from paramiko import BadHostKeyException, PasswordRequiredException, AuthenticationException, SSHException
+import psutil
 
 from alerts.email_alert import EmailAlertSender
 from alerts.http_post_alert import HTTPPostAlertSender
 from alerts.pooled_alerter import DifferentThreadAlert
 from configure_logger import LogManager
+from observation.connection_check import ConnectionCheck
 from observation.http_server import inspection_http_server
 from observation.status import Status
 from tunnel_infra.TunnelProcess import TunnelProcess
 from tunnel_infra.pathtype import PathType
 from version import __version__
+
 freeze_support()
 
 
@@ -39,6 +44,7 @@ def main():
     parser.add_argument("--test_tunnels", dest="test_tunnels",
                         help="Test to establish each one of the tunnels", action='store_true',
                         default=False)
+    parser.add_argument("--test_all", dest="test_all", help="Test connections and tunnels", action="store_true", default=False)
     parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + __version__)
     args = parser.parse_args()
     config = configparser.ConfigParser()
@@ -58,7 +64,8 @@ def main():
         if log_path.startswith("\\\\?\\"):
             log_path = log_path.replace("\\\\?\\", "")
     LogManager.path = log_path
-    logger = LogManager.configure_logger('main_tunnel.log', params.get("log_level", "INFO"), params.getboolean("log_to_console", False) or test_something)
+    logger = LogManager.configure_logger('main_tunnel.log', params.get("log_level", "INFO"),
+                                         params.getboolean("log_to_console", False) or test_something)
     if tunnel_manager_id is None:
         logger.error("tunnel_manager_id not set in the config file")
         sys.exit(1)
@@ -71,7 +78,7 @@ def main():
 
     if args.test_http:
         test_http_and_exit(logger, post_sender)
-        
+
     tunnel_path = params.get("tunnel_dirs", "configs")
 
     if not isabs(args.config_ini):
@@ -79,7 +86,6 @@ def main():
         # Hack: sometimes when running on windows with pyinstaller and shawl a "\\?\" is added to cwd and it fails
         if tunnel_path.startswith("\\\\?\\"):
             tunnel_path = tunnel_path.replace("\\\\?\\", "")
-
 
     files = [join(tunnel_path, f) for f in listdir(tunnel_path) if isfile(join(tunnel_path, f)) and f[-4:] == '.ini']
     processes = {}
@@ -89,6 +95,14 @@ def main():
 
     if args.test_tunnels:
         test_tunnels_and_exit(files, logger, processes)
+
+    if args.test_all:
+        init()
+        coloredlogs.install(level='DEBUG', logger=logger)
+        test_everything(files, logger, processes)
+        logger.info("Press Enter to continue...")
+        input()
+        sys.exit(0)
 
     senders = [x for x in [smtp_sender, post_sender] if x is not None]
 
@@ -105,16 +119,17 @@ def main():
 
     register_signal_handlers(processes, pool)
 
-    http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, status, __version__, params.getint('inspection_port'), logger, only_local=bool(params.getboolean('inspection_localhost_only',True)))
+    http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, status, __version__,
+                                             params.getint('inspection_port'), logger,
+                                             only_local=bool(params.getboolean('inspection_localhost_only', True)))
     http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
     http_inspection_thread.daemon = True
     http_inspection_thread.start()
 
-
     while True:
         items = list(processes.items())
         to_restart = []
-        check_tunnels(files, items, logger, processes, to_restart, main_sender)
+        check_tunnels(files, items, logger, processes, to_restart, pool, main_sender)
         restart_tunnels(files, logger, processes, to_restart, senders, status)
         if not http_inspection_thread.is_alive():
             http_inspection_thread.join()
@@ -123,9 +138,57 @@ def main():
             http_inspection_thread.start()
         time.sleep(30)
 
+def test_everything(files, logger, processes):
+    logger.info("We will check your installation and configuration")
+    service_up = test_service_is_running(logger)
+    if not service_up:
+        logger.info("The service is not running! You won't be able to access your services from the cloud")
+    failed_connection = test_connections(files, logger, processes)
+    if not failed_connection:
+        logger.info("All the services are reachable!")
+    else:
+        logger.info("Not all the services were reachable, please check the output")
+    if service_up:
+        logger.info("We will partially test the tunnels because the service is up. If you need further testing, please stop the service and repeat the test")
+    failed_tunnels = test_tunnels(files, logger, test_reverse_forward=not service_up)
+    if not failed_tunnels:
+        logger.info("All the tunnels seem to work!")
+    else:
+        logger.info("Not all the tunnels are working, check the output!")
+
+
+
+
+
+def test_service_is_running(logger):
+    logger.info("Going to check the status of the service")
+    if os.name == 'nt':
+        service_name = 'InvGateTunnel'
+        try:
+            service = psutil.win_service_get(service_name)
+            service = service.as_dict()
+        except Exception as e:
+            logger.exception("Could not determine if service is running")
+            return False
+        logger.info("%s Service is %s", service_name, service['status'])
+        return service['status'] == 'running'
+    else:
+        logger.info("We are not running on windows")
+    return False
+
 
 
 def test_tunnels_and_exit(files, logger, processes):
+    failed = test_tunnels(files, logger)
+    if failed:
+        logger.error("Some tunnels failed!")
+        sys.exit(4)
+    else:
+        logger.info("All the tunnels worked!")
+        sys.exit(0)
+
+
+def test_tunnels(files, logger, test_reverse_forward=True):
     failed = False
     for each in range(len(files)):
         try:
@@ -133,24 +196,33 @@ def test_tunnels_and_exit(files, logger, processes):
             logger.info("Going to start tunnel from file %s", config_file)
             try:
                 tunnel_process = TunnelProcess.from_config_file(config_file, [])
-
             except Exception as e:
-                logger.exception("Failed to create tunnel from file %s: %s", config_file, e)
+                logger.exception(
+                    "Failed to create tunnel from file %s. Configuration file may be incorrect. Error detail %s",
+                    config_file, e)
                 failed = True
                 continue
             tunnel_process.logger = logger
-            client = tunnel_process.ssh_connect(exit_on_failure=False)
-            transport = client.get_transport()
             try:
-                transport.request_port_forward("", tunnel_process.remote_port_to_forward)
-                transport.close()
-            except SSHException as e:
-                message = """Failed to connect with service %s:%s. Port binding rejected
-                                        Please check server_host, server_port and port in your config
-                                        Error %r"""
-                logger.exception(message % (tunnel_process.remote_host, tunnel_process.remote_port, e))
+                client = tunnel_process.ssh_connect(exit_on_failure=False)
+                transport = client.get_transport()
+            except socket.timeout as e:
+                message = """Failed to connect with  %s:%s. We received a connection timeout. Please check that you have internet access, that you can access to %s using telnet. Error %r"""
+                logger.exception(message % (tunnel_process.server_host, tunnel_process.server_port,
+                                            (tunnel_process.server_host, tunnel_process.server_port), e))
                 failed = True
                 continue
+            if test_reverse_forward:
+                try:
+                    transport.request_port_forward("", tunnel_process.remote_port_to_forward)
+                    transport.close()
+                except SSHException as e:
+                    message = """Failed to connect with service %s:%s. We received a Port binding rejected error. That means that we could not open our tunnel completely.
+                                            Please check server_host, server_port and port in your config.
+                                            Error %r"""
+                    logger.exception(message % (tunnel_process.remote_host, tunnel_process.remote_port, e))
+                    failed = True
+                    continue
             client.close()
         except BadHostKeyException as e:
             message = """Failed to connect with service %s:%s. The host key given by the SSH server did not match what 
@@ -158,8 +230,8 @@ def test_tunnels_and_exit(files, logger, processes):
             The hostname was %s, 
             the expected key was %s, 
             the key that we got was %s
-            Please check server_key in your config
-            Error %r"""
+            Please check server_key in your config.
+            Detailed Error %r"""
             logger.exception(message % (tunnel_process.remote_host, tunnel_process.remote_port, e.hostname,
                                         e.expected_key.get_base64(), e.key.get_base64(), e))
             failed = True
@@ -180,32 +252,48 @@ def test_tunnels_and_exit(files, logger, processes):
             failed = True
             logger.exception("Failed to establish tunnel %s with error %r" %
                              (tunnel_process.tunnel_name, e))
-    if failed:
-        logger.error("Some tunnels failed!")
-        sys.exit(4)
-    else:
-        logger.info("All the tunnels worked!")
-        sys.exit(0)
+    return failed
+
+
+def test_internet_access(logger):
+    host = "8.8.8.8"
+    port = 53
+    try:
+        socket.setdefaulttimeout(3)
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+        logger.info("It seems that we are able to access internet")
+        return True
+    except socket.error as ex:
+        logger.error("It seems that the server DOES NOT have internet access")
+        return False
 
 
 def test_connections_and_exit(files, logger, processes):
-    create_tunnels_from_config([], files, logger, processes)
-    failed = False
-    for key, tunnel_proc in processes.items():
-        with socket() as sock:
-            try:
-                sock.settimeout(2)
-                sock.connect((tunnel_proc.remote_host, tunnel_proc.remote_port))
-            except Exception as e:
-                logger.exception("Failed to connect with service %s:%s. Please check remote_host and remote_port in your cofig. Error %r" %
-                                 (tunnel_proc.remote_host, tunnel_proc.remote_port, e))
-                failed = True
+    failed = test_connections(files, logger, processes)
     if failed:
         logger.error("Some connections failed!")
         sys.exit(3)
     else:
         logger.info("All the connections worked!")
         sys.exit(0)
+
+
+def test_connections(files, logger, processes):
+    create_tunnels_from_config([], files, logger, processes)
+    failed = False
+    test_internet_access(logger)
+    for key, tunnel_proc in processes.items():
+        with socket.socket() as sock:
+            try:
+                sock.settimeout(2)
+                sock.connect((tunnel_proc.remote_host, tunnel_proc.remote_port))
+                logger.info("Connection to %s:%s was successful", tunnel_proc.remote_host, tunnel_proc.remote_port)
+            except Exception as e:
+                logger.exception(
+                    "Failed to connect with service %s:%s. Please check that you have internet access, that there is not a firewall blocking the connection or that remote_host and remote_port in your config are correct. Error %r" %
+                    (tunnel_proc.remote_host, tunnel_proc.remote_port, e))
+                failed = True
+    return failed
 
 
 def test_mail_and_exit(logger, smtp_sender):
@@ -234,9 +322,13 @@ def test_http_and_exit(logger, post_sender):
     sys.exit(0)
 
 
-def check_tunnels(files, items, logger, processes, to_restart, pooled_sender):
-
+def check_tunnels(files, items, logger, processes, to_restart, pool, pooled_sender):
     for key, proc in items:
+        """
+        pool.submit(ConnectionCheck(logger, pooled_sender).test_connection, proc.tunnel_name,
+                    processes[key].remote_host,
+                    processes[key].remote_port)
+        """
         if (not proc.is_alive()) and proc.exitcode is not None:
             proc.terminate()
             del processes[key]
@@ -257,7 +349,7 @@ def restart_tunnels(files, logger, processes, to_restart, alert_senders, status)
         logger.info("Tunnel %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
 
 
-def register_signal_handlers(processes,pool):
+def register_signal_handlers(processes, pool):
     def exit_gracefully(*args, **kwargs):
         if pool:
             pool.shutdown()
@@ -297,7 +389,8 @@ def create_tunnels_from_config(alert_senders, files, logger, processes):
 def get_post_alert_sender(logger, tunnel_manager_id, params):
     if params.get("http_url"):
         try:
-            post_sender = HTTPPostAlertSender(tunnel_manager_id, params['http_url'], params['http_user'], params['http_password'],logger)
+            post_sender = HTTPPostAlertSender(tunnel_manager_id, params['http_url'], params['http_user'],
+                                              params['http_password'], logger)
         except KeyError as e:
             logger.exception("Missing smtp param %s" % e)
             sys.exit(-1)
@@ -305,10 +398,12 @@ def get_post_alert_sender(logger, tunnel_manager_id, params):
         post_sender = None
     return post_sender
 
+
 def get_smtp_alert_sender(logger, tunnel_manager_id, params):
     if params.get("smtp_hostname"):
         try:
-            smtp_sender = EmailAlertSender(tunnel_manager_id, params['smtp_hostname'], params.get('smtp_login',None), params.get('smtp_password', None),
+            smtp_sender = EmailAlertSender(tunnel_manager_id, params['smtp_hostname'], params.get('smtp_login', None),
+                                           params.get('smtp_password', None),
                                            params['smtp_to'], logger,
                                            port=params.getint('smtp_port', 25), from_address=params.get('smtp_from'),
                                            security=params.get("smtp_security"))

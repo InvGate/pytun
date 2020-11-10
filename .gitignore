@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+*.log.*
+pytun.build/
+pytun.dist/
+venv38
+winconfig/
+v
