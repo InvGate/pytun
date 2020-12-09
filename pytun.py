@@ -97,7 +97,6 @@ def main():
         test_tunnels_and_exit(files, logger, processes)
 
     if args.test_all:
-        init()
         coloredlogs.install(level='DEBUG', logger=logger)
         test_everything(files, logger, processes)
         logger.info("Press Enter to continue...")
