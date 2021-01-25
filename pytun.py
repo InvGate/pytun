@@ -41,7 +41,7 @@ def main():
     parser.add_argument("--test_connections", dest="test_connections",
                         help="Test to connect to the exposed services for each connector", action='store_true',
                         default=False)
-    parser.add_argument("--test_tunnels", dest="test_tunnels",
+    parser.add_argument("--test_connectors", dest="test_connectors",
                         help="Test to establish each one of the connectors", action='store_true',
                         default=False)
     parser.add_argument("--test_all", dest="test_all", help="Test connections", action="store_true", default=False)
@@ -55,7 +55,7 @@ def main():
 
     config.read(ini_path)
     params = config['pytun']
-    test_something = args.test_mail or args.test_http or args.test_connections or args.test_tunnels
+    test_something = args.test_mail or args.test_http or args.test_connections or args.test_connectors
     tunnel_manager_id = params.get("tunnel_manager_id", None)
     log_path = params.get("log_path", './')
     if not isabs(log_path):
@@ -95,7 +95,7 @@ def main():
     if args.test_connections:
         test_connections_and_exit(files, logger, processes)
 
-    if args.test_tunnels:
+    if args.test_connectors:
         test_tunnels_and_exit(files, logger, processes)
 
     if args.test_all:
