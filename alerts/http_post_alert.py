@@ -14,7 +14,7 @@ class HTTPPostAlertSender(AlertSender):
 
     def send_alert(self, tunnel_name, message=None, exception_on_failure=False):
         try:
-            message = message or "Tunnel Down!"
+            message = message or "Connector Down!"
             data = {'tunnel_name': tunnel_name, 'message':message, 'tunnel_manager_id': self.tunnel_manager_id}
             auth_data = (self.user, self.password)
             resp = requests.post(self.post_url, auth=auth_data, data=json.dumps(data))

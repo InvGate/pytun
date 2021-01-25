@@ -37,7 +37,7 @@ class Tunnel(object):
                 return
 
             self.logger.debug(
-                "Connected!  Tunnel open %r -> %r -> %r"
+                "Connected!  Connector open %r -> %r -> %r"
                 , chan.origin_addr, chan.getpeername(), (host, port)
             )
             try:
@@ -54,29 +54,29 @@ class Tunnel(object):
                             break
                         sock.send(data)
                 chan.close()
-                self.logger.debug("Tunnel closed from %r", chan.origin_addr)
+                self.logger.debug("Connector closed from %r", chan.origin_addr)
             except ConnectionResetError as e:
                 self.logger.debug(e)
             except Exception as e:
                 self.logger.exception(e)
 
     def validate_tunnel_up(self):
-        self.logger.debug("Going to check if tunnel is up")
+        self.logger.debug("Going to check if connector is up")
         try:
             self.transport.send_ignore()
         except Exception as e:
-            self.logger.exception("Tunnel down! %s", e)
+            self.logger.exception("Connector down! %s", e)
             self.failed=True
             return
         if not self.transport.is_active():
-            self.logger.exception("Tunnel down! Transport is not active")
+            self.logger.exception("Connector down! Transport is not active")
             self.failed = True
             return
         try:
             chn = self.transport.open_session(timeout=30)
             chn.close()
         except Exception as e:
-            self.logger.exception("Tunnel down! Failed to start a check session %s with timeout 30 seconds", e)
+            self.logger.exception("Connector down! Failed to start a check session %s with timeout 30 seconds", e)
             self.failed = True
             return
         self.timer = threading.Timer(self.keep_alive_time, self.validate_tunnel_up)

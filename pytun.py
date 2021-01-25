@@ -39,12 +39,12 @@ def main():
     parser.add_argument("--test_http", dest="test_http", help="Send a test post to validate the http config and exits",
                         action='store_true', default=False)
     parser.add_argument("--test_connections", dest="test_connections",
-                        help="Test to connect to the exposed services for each tunnel", action='store_true',
+                        help="Test to connect to the exposed services for each connector", action='store_true',
                         default=False)
-    parser.add_argument("--test_tunnels", dest="test_tunnels",
-                        help="Test to establish each one of the tunnels", action='store_true',
+    parser.add_argument("--test_connectors", dest="test_connectors",
+                        help="Test to establish each one of the connectors", action='store_true',
                         default=False)
-    parser.add_argument("--test_all", dest="test_all", help="Test connections and tunnels", action="store_true", default=False)
+    parser.add_argument("--test_all", dest="test_all", help="Test connections", action="store_true", default=False)
     parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + __version__)
     args = parser.parse_args()
     config = configparser.ConfigParser()
@@ -151,9 +151,9 @@ def test_everything(files, logger, processes):
         logger.info("We will partially test the tunnels because the service is up. If you need further testing, please stop the service and repeat the test")
     failed_tunnels = test_tunnels(files, logger, test_reverse_forward=not service_up)
     if not failed_tunnels:
-        logger.info("All the tunnels seem to work!")
+        logger.info("All the connectors seem to work!")
     else:
-        logger.info("Not all the tunnels are working, check the output!")
+        logger.info("Not all the connectors are working, check the output!")
 
 
 
@@ -180,10 +180,10 @@ def test_service_is_running(logger):
 def test_tunnels_and_exit(files, logger, processes):
     failed = test_tunnels(files, logger)
     if failed:
-        logger.error("Some tunnels failed!")
+        logger.error("Some connectors failed!")
         sys.exit(4)
     else:
-        logger.info("All the tunnels worked!")
+        logger.info("All the connectors worked!")
         sys.exit(0)
 
 
@@ -192,12 +192,12 @@ def test_tunnels(files, logger, test_reverse_forward=True):
     for each in range(len(files)):
         try:
             config_file = files[each]
-            logger.info("Going to start tunnel from file %s", config_file)
+            logger.info("Going to start connector from file %s", config_file)
             try:
                 tunnel_process = TunnelProcess.from_config_file(config_file, [])
             except Exception as e:
                 logger.exception(
-                    "Failed to create tunnel from file %s. Configuration file may be incorrect. Error detail %s",
+                    "Failed to create connector from file %s. Configuration file may be incorrect. Error detail %s",
                     config_file, e)
                 failed = True
                 continue
@@ -216,7 +216,7 @@ def test_tunnels(files, logger, test_reverse_forward=True):
                     transport.request_port_forward("", tunnel_process.remote_port_to_forward)
                     transport.close()
                 except SSHException as e:
-                    message = """Failed to connect with service %s:%s. We received a Port binding rejected error. That means that we could not open our tunnel completely.
+                    message = """Failed to connect with service %s:%s. We received a Port binding rejected error. That means that we could not open our connector completely.
                                             Please check server_host, server_port and port in your config.
                                             Error %r"""
                     logger.exception(message % (tunnel_process.remote_host, tunnel_process.remote_port, e))
@@ -249,7 +249,7 @@ def test_tunnels(files, logger, test_reverse_forward=True):
 
         except Exception as e:
             failed = True
-            logger.exception("Failed to establish tunnel %s with error %r" %
+            logger.exception("Failed to establish connector %s with error %r" %
                              (tunnel_process.tunnel_name, e))
     return failed
 
@@ -332,20 +332,20 @@ def check_tunnels(files, items, logger, processes, to_restart, pool, pooled_send
             proc.terminate()
             del processes[key]
             to_restart.append(key)
-            logger.info("Tunnel %s is down", files[key])
+            logger.info("Connector %s is down", files[key])
             pooled_sender.send_alert(proc.tunnel_name)
         else:
-            logger.debug("Tunnel %s is up", files[key])
+            logger.debug("Connector %s is up", files[key])
 
 
 def restart_tunnels(files, logger, processes, to_restart, alert_senders, status):
     for each in to_restart:
-        logger.info("Going to restart tunnel from file %s", files[each])
+        logger.info("Going to restart connector from file %s", files[each])
         tunnel_process = TunnelProcess.from_config_file(files[each], alert_senders)
         processes[each] = tunnel_process
         tunnel_process.start()
         status.start_tunnel(files[each])
-        logger.info("Tunnel %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
+        logger.info("Connector %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
 
 
 def register_signal_handlers(processes, pool):
@@ -368,17 +368,17 @@ def start_tunnels(files, logger, processes, alert_senders, status):
     for key, tunnel_process in processes.items():
         tunnel_process.start()
         status.start_tunnel(files[key])
-        logger.info("Tunnel %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
+        logger.info("Connector %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
 
 
 def create_tunnels_from_config(alert_senders, files, logger, processes):
     for each in range(len(files)):
         config_file = files[each]
-        logger.info("Going to start tunnel from file %s", config_file)
+        logger.info("Going to start connector from file %s", config_file)
         try:
             tunnel_process = TunnelProcess.from_config_file(config_file, alert_senders)
         except Exception as e:
-            logger.exception("Failed to create tunnel from file %s: %s", config_file, e)
+            logger.exception("Failed to create connector from file %s: %s", config_file, e)
             for pr in processes.values():
                 pr.terminate()
             sys.exit(1)
