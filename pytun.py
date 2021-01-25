@@ -139,6 +139,7 @@ def main():
             http_inspection_thread.start()
         time.sleep(30)
 
+
 def test_everything(files, logger, processes):
     logger.info("We will check your installation and configuration")
     service_up = test_service_is_running(logger)
@@ -158,9 +159,6 @@ def test_everything(files, logger, processes):
         logger.info("Not all the connectors are working, check the output!")
 
 
-
-
-
 def test_service_is_running(logger):
     logger.info("Going to check the status of the service")
     if os.name == 'nt':
@@ -176,7 +174,6 @@ def test_service_is_running(logger):
     else:
         logger.info("We are not running on windows")
     return False
-
 
 
 def test_tunnels_and_exit(files, logger, processes):
