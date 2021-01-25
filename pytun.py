@@ -41,7 +41,7 @@ def main():
     parser.add_argument("--test_connections", dest="test_connections",
                         help="Test to connect to the exposed services for each connector", action='store_true',
                         default=False)
-    parser.add_argument("--test_connectors", dest="test_connectors",
+    parser.add_argument("--test_tunnels", dest="test_tunnels",
                         help="Test to establish each one of the connectors", action='store_true',
                         default=False)
     parser.add_argument("--test_all", dest="test_all", help="Test connections", action="store_true", default=False)
@@ -60,11 +60,13 @@ def main():
     log_path = params.get("log_path", './')
     if not isabs(log_path):
         log_path = join(dirname(realpath(__file__)), log_path)
+        if not os.path.isdir(log_path):
+            os.mkdir(log_path)
         # Hack: sometimes when running on windows with pyinstaller and shawl a "\\?\" is added to cwd and it fails
         if log_path.startswith("\\\\?\\"):
             log_path = log_path.replace("\\\\?\\", "")
     LogManager.path = log_path
-    logger = LogManager.configure_logger('main_tunnel.log', params.get("log_level", "INFO"),
+    logger = LogManager.configure_logger('main_connector.log', params.get("log_level", "INFO"),
                                          params.getboolean("log_to_console", False) or test_something)
     if tunnel_manager_id is None:
         logger.error("tunnel_manager_id not set in the config file")
