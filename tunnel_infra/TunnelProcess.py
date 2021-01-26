@@ -104,7 +104,10 @@ class TunnelProcess(multiprocessing.Process):
         config = configparser.ConfigParser()
         config.read(ini_file)
         directory = dirname(realpath(ini_file))
-        defaults = config['tunnel']
+        if 'connector' in config:
+            defaults = config['connector']
+        else:
+            defaults = config['tunnel']
         log_level = defaults.get('log_level')
         log_to_console = defaults.get('log_to_console', False)
         server_host = defaults['server_host']
