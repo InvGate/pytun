@@ -12,7 +12,6 @@ from os import listdir
 from os.path import isabs, dirname, realpath
 from os.path import isfile, join
 import coloredlogs
-from colorama import init
 from paramiko import BadHostKeyException, PasswordRequiredException, AuthenticationException, SSHException
 import psutil
 
