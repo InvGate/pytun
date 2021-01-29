@@ -41,6 +41,9 @@ def main():
     parser.add_argument("--test_connections", dest="test_connections",
                         help="Test to connect to the exposed services for each connector", action='store_true',
                         default=False)
+    parser.add_argument("--test_tunnels", dest="test_connectors",
+                        help="Test to establish each one of the connectors", action='store_true',
+                        default=False)
     parser.add_argument("--test_connectors", dest="test_connectors",
                         help="Test to establish each one of the connectors", action='store_true',
                         default=False)
