@@ -108,7 +108,7 @@ class TunnelProcess(multiprocessing.Process):
             defaults = config['connector']
         else:
             defaults = config['tunnel']
-        log_level = defaults.get('log_level')
+        log_level = defaults.get('log_level', 'DEBUG')
         log_to_console = defaults.get('log_to_console', False)
         server_host = defaults['server_host']
         server_port = int(defaults.get('server_port', SSH_PORT))
