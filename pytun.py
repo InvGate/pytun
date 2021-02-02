@@ -32,7 +32,7 @@ freeze_support()
 
 def main():
     parser = argparse.ArgumentParser(description='Tunnel')
-    parser.add_argument("--config_ini", dest="config_ini", help="Confiuration file to use", default="pytun.ini",
+    parser.add_argument("--config_ini", dest="config_ini", help="Confiuration file to use", default="connector.ini",
                         type=PathType(dash_ok=False))
     parser.add_argument("--test_smtp", dest="test_mail", help="Send a test email to validate the smtp config and exits",
                         action='store_true', default=False)
