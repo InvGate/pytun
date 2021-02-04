@@ -151,6 +151,8 @@ def test_everything(files, logger, processes):
     logger.info("We will check your installation and configuration")
     service_up = test_service_is_running(logger)
     if not service_up:
+        service_up = test_service_is_running(logger, service_name='InvgateConnector')
+    if not service_up:
         logger.info("The service is not running! You won't be able to access your services from the cloud")
     failed_connection = test_connections(files, logger, processes)
     if not failed_connection:
@@ -158,7 +160,8 @@ def test_everything(files, logger, processes):
     else:
         logger.info("Not all the services were reachable, please check the output")
     if service_up:
-        logger.info("We will partially test the tunnels because the service is up. If you need further testing, please stop the service and repeat the test")
+        logger.info(
+            "We will partially test the tunnels because the service is up. If you need further testing, please stop the service and repeat the test")
     failed_tunnels = test_tunnels(files, logger, test_reverse_forward=not service_up)
     if not failed_tunnels:
         logger.info("All the connectors seem to work!")
@@ -166,10 +169,9 @@ def test_everything(files, logger, processes):
         logger.info("Not all the connectors are working, check the output!")
 
 
-def test_service_is_running(logger):
+def test_service_is_running(logger, service_name='InvGateTunnel'):
     logger.info("Going to check the status of the service")
     if os.name == 'nt':
-        service_name = 'InvGateTunnel'
         try:
             service = psutil.win_service_get(service_name)
             service = service.as_dict()
