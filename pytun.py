@@ -56,8 +56,12 @@ def main():
     else:
         ini_path = args.config_ini
 
-    config.read(ini_path)
-    params = config['pytun']
+    if os.path.isfile(ini_path):
+        config.read(ini_path)
+    if 'config-connector' in config:
+        params = config['config-connector']
+    else:
+        params = config['pytun']
     test_something = args.test_mail or args.test_http or args.test_connections or args.test_connectors
     tunnel_manager_id = params.get("tunnel_manager_id", None)
     log_path = params.get("log_path", './logs')
