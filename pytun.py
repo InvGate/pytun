@@ -29,10 +29,12 @@ from version import __version__
 
 freeze_support()
 
+INI_FILENAME = 'connector.ini'
+
 
 def main():
     parser = argparse.ArgumentParser(description='Tunnel')
-    parser.add_argument("--config_ini", dest="config_ini", help="Configuration file to use", default="pytun.ini",
+    parser.add_argument("--config_ini", dest="config_ini", help="Configuration file to use", default=INI_FILENAME,
                         type=PathType(dash_ok=False))
     parser.add_argument("--test_smtp", dest="test_mail", help="Send a test email to validate the smtp config and exits",
                         action='store_true', default=False)
@@ -55,13 +57,14 @@ def main():
         ini_path = join(dirname(realpath(__file__)), args.config_ini)
     else:
         ini_path = args.config_ini
-
+    pytun_ini_path = join(dirname(realpath(__file__)), 'pytun.ini')
+    if os.path.isfile(pytun_ini_path):
+        os.rename(pytun_ini_path, join(dirname(realpath(__file__)), INI_FILENAME))
     if os.path.isfile(ini_path):
         config.read(ini_path)
         if 'config-connector' in config:
             params = config['config-connector']
         else:
-            print([x for x in config])
             params = config['pytun']
     else:
         params = {}
