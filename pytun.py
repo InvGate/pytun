@@ -32,7 +32,7 @@ freeze_support()
 
 def main():
     parser = argparse.ArgumentParser(description='Tunnel')
-    parser.add_argument("--config_ini", dest="config_ini", help="Confiuration file to use", default="connector.ini",
+    parser.add_argument("--config_ini", dest="config_ini", help="Configuration file to use", default="pytun.ini",
                         type=PathType(dash_ok=False))
     parser.add_argument("--test_smtp", dest="test_mail", help="Send a test email to validate the smtp config and exits",
                         action='store_true', default=False)
@@ -58,12 +58,15 @@ def main():
 
     if os.path.isfile(ini_path):
         config.read(ini_path)
-    if 'config-connector' in config:
-        params = config['config-connector']
+        if 'config-connector' in config:
+            params = config['config-connector']
+        else:
+            print([x for x in config])
+            params = config['pytun']
     else:
-        params = config['pytun']
+        params = {}
     test_something = args.test_mail or args.test_http or args.test_connections or args.test_connectors
-    tunnel_manager_id = params.get("tunnel_manager_id", None)
+    tunnel_manager_id = params.get("tunnel_manager_id", '')
     log_path = params.get("log_path", './logs')
     if not isabs(log_path):
         log_path = join(dirname(realpath(__file__)), log_path)
@@ -73,8 +76,7 @@ def main():
         if log_path.startswith("\\\\?\\"):
             log_path = log_path.replace("\\\\?\\", "")
     LogManager.path = log_path
-    logger = LogManager.configure_logger('main_connector.log', params.get("log_level", "INFO"),
-                                         params.getboolean("log_to_console", False) or test_something)
+    logger = LogManager.configure_logger('main_connector.log', params.get("log_level", "INFO"), test_something)
     if tunnel_manager_id is None:
         logger.error("tunnel_manager_id not set in the config file")
         sys.exit(1)
