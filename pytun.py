@@ -57,7 +57,7 @@ def main():
     else:
         ini_path = args.config_ini
     pytun_ini_path = join(dirname(realpath(__file__)), 'pytun.ini')
-    if os.path.isfile(pytun_ini_path):
+    if os.path.isfile(pytun_ini_path) and not os.path.isfile(join(dirname(realpath(__file__)), INI_FILENAME)):
         os.rename(pytun_ini_path, join(dirname(realpath(__file__)), INI_FILENAME))
     if os.path.isfile(ini_path):
         config.read(ini_path)
@@ -180,7 +180,6 @@ def test_service_is_running(logger, service_name='InvGateTunnel'):
             service = psutil.win_service_get(service_name)
             service = service.as_dict()
         except Exception as e:
-            logger.exception("Could not determine if service is running")
             return False
         logger.info("%s Service is %s", service_name, service['status'])
         return service['status'] == 'running'
