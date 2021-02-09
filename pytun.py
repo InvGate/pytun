@@ -72,11 +72,11 @@ def main():
     log_path = params.get("log_path", './logs')
     if not isabs(log_path):
         log_path = join(dirname(realpath(__file__)), log_path)
-        if not os.path.isdir(log_path):
-            os.mkdir(log_path)
         # Hack: sometimes when running on windows with pyinstaller and shawl a "\\?\" is added to cwd and it fails
         if log_path.startswith("\\\\?\\"):
             log_path = log_path.replace("\\\\?\\", "")
+        if not os.path.isdir(log_path):
+            os.mkdir(log_path)
     LogManager.path = log_path
     logger = LogManager.configure_logger('main_connector.log', params.get("log_level", "INFO"), test_something)
     if tunnel_manager_id is None:
