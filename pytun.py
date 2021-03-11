@@ -28,22 +28,27 @@ from version import __version__
 
 freeze_support()
 
+INI_FILENAME = 'connector.ini'
+
 
 def main():
     parser = argparse.ArgumentParser(description='Tunnel')
-    parser.add_argument("--config_ini", dest="config_ini", help="Confiuration file to use", default="pytun.ini",
+    parser.add_argument("--config_ini", dest="config_ini", help="Configuration file to use", default=INI_FILENAME,
                         type=PathType(dash_ok=False))
     parser.add_argument("--test_smtp", dest="test_mail", help="Send a test email to validate the smtp config and exits",
                         action='store_true', default=False)
     parser.add_argument("--test_http", dest="test_http", help="Send a test post to validate the http config and exits",
                         action='store_true', default=False)
     parser.add_argument("--test_connections", dest="test_connections",
-                        help="Test to connect to the exposed services for each tunnel", action='store_true',
+                        help="Test to connect to the exposed services for each connector", action='store_true',
                         default=False)
-    parser.add_argument("--test_tunnels", dest="test_tunnels",
-                        help="Test to establish each one of the tunnels", action='store_true',
+    parser.add_argument("--test_tunnels", dest="test_connectors",
+                        help="Test to establish each one of the connectors", action='store_true',
                         default=False)
-    parser.add_argument("--test_all", dest="test_all", help="Test connections and tunnels", action="store_true", default=False)
+    parser.add_argument("--test_connectors", dest="test_connectors",
+                        help="Test to establish each one of the connectors", action='store_true',
+                        default=False)
+    parser.add_argument("--test_all", dest="test_all", help="Test connections", action="store_true", default=False)
     parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + __version__)
     args = parser.parse_args()
     config = configparser.ConfigParser()
@@ -51,20 +56,29 @@ def main():
         ini_path = join(dirname(realpath(__file__)), args.config_ini)
     else:
         ini_path = args.config_ini
-
-    config.read(ini_path)
-    params = config['pytun']
-    test_something = args.test_mail or args.test_http or args.test_connections or args.test_tunnels
-    tunnel_manager_id = params.get("tunnel_manager_id", None)
-    log_path = params.get("log_path", './')
+    pytun_ini_path = join(dirname(realpath(__file__)), 'pytun.ini')
+    if os.path.isfile(pytun_ini_path) and not os.path.isfile(join(dirname(realpath(__file__)), INI_FILENAME)):
+        os.rename(pytun_ini_path, join(dirname(realpath(__file__)), INI_FILENAME))
+    if os.path.isfile(ini_path):
+        config.read(ini_path)
+        if 'config-connector' in config:
+            params = config['config-connector']
+        else:
+            params = config['pytun']
+    else:
+        params = {}
+    test_something = args.test_mail or args.test_http or args.test_connections or args.test_connectors
+    tunnel_manager_id = params.get("tunnel_manager_id", '')
+    log_path = params.get("log_path", './logs')
     if not isabs(log_path):
         log_path = join(dirname(realpath(__file__)), log_path)
         # Hack: sometimes when running on windows with pyinstaller and shawl a "\\?\" is added to cwd and it fails
         if log_path.startswith("\\\\?\\"):
             log_path = log_path.replace("\\\\?\\", "")
+        if not os.path.isdir(log_path):
+            os.mkdir(log_path)
     LogManager.path = log_path
-    logger = LogManager.configure_logger('main_tunnel.log', params.get("log_level", "INFO"),
-                                         params.getboolean("log_to_console", False) or test_something)
+    logger = LogManager.configure_logger('main_connector.log', params.get("log_level", "INFO"), test_something)
     if tunnel_manager_id is None:
         logger.error("tunnel_manager_id not set in the config file")
         sys.exit(1)
@@ -92,7 +106,7 @@ def main():
     if args.test_connections:
         test_connections_and_exit(files, logger, processes)
 
-    if args.test_tunnels:
+    if args.test_connectors:
         test_tunnels_and_exit(files, logger, processes)
 
     if args.test_all:
@@ -136,9 +150,12 @@ def main():
             http_inspection_thread.start()
         time.sleep(30)
 
+
 def test_everything(files, logger, processes):
     logger.info("We will check your installation and configuration")
     service_up = test_service_is_running(logger)
+    if not service_up:
+        service_up = test_service_is_running(logger, service_name='InvgateConnector')
     if not service_up:
         logger.info("The service is not running! You won't be able to access your services from the cloud")
     failed_connection = test_connections(files, logger, processes)
@@ -147,26 +164,22 @@ def test_everything(files, logger, processes):
     else:
         logger.info("Not all the services were reachable, please check the output")
     if service_up:
-        logger.info("We will partially test the tunnels because the service is up. If you need further testing, please stop the service and repeat the test")
+        logger.info(
+            "We will partially test the tunnels because the service is up. If you need further testing, please stop the service and repeat the test")
     failed_tunnels = test_tunnels(files, logger, test_reverse_forward=not service_up)
     if not failed_tunnels:
-        logger.info("All the tunnels seem to work!")
+        logger.info("All the connectors seem to work!")
     else:
-        logger.info("Not all the tunnels are working, check the output!")
+        logger.info("Not all the connectors are working, check the output!")
 
 
-
-
-
-def test_service_is_running(logger):
+def test_service_is_running(logger, service_name='InvGateTunnel'):
     logger.info("Going to check the status of the service")
     if os.name == 'nt':
-        service_name = 'InvGateTunnel'
         try:
             service = psutil.win_service_get(service_name)
             service = service.as_dict()
         except Exception as e:
-            logger.exception("Could not determine if service is running")
             return False
         logger.info("%s Service is %s", service_name, service['status'])
         return service['status'] == 'running'
@@ -175,14 +188,13 @@ def test_service_is_running(logger):
     return False
 
 
-
 def test_tunnels_and_exit(files, logger, processes):
     failed = test_tunnels(files, logger)
     if failed:
-        logger.error("Some tunnels failed!")
+        logger.error("Some connectors failed!")
         sys.exit(4)
     else:
-        logger.info("All the tunnels worked!")
+        logger.info("All the connectors worked!")
         sys.exit(0)
 
 
@@ -191,12 +203,12 @@ def test_tunnels(files, logger, test_reverse_forward=True):
     for each in range(len(files)):
         try:
             config_file = files[each]
-            logger.info("Going to start tunnel from file %s", config_file)
+            logger.info("Going to start connector from file %s", config_file)
             try:
                 tunnel_process = TunnelProcess.from_config_file(config_file, [])
             except Exception as e:
                 logger.exception(
-                    "Failed to create tunnel from file %s. Configuration file may be incorrect. Error detail %s",
+                    "Failed to create connector from file %s. Configuration file may be incorrect. Error detail %s",
                     config_file, e)
                 failed = True
                 continue
@@ -215,7 +227,7 @@ def test_tunnels(files, logger, test_reverse_forward=True):
                     transport.request_port_forward("", tunnel_process.remote_port_to_forward)
                     transport.close()
                 except SSHException as e:
-                    message = """Failed to connect with service %s:%s. We received a Port binding rejected error. That means that we could not open our tunnel completely.
+                    message = """Failed to connect with service %s:%s. We received a Port binding rejected error. That means that we could not open our connector completely.
                                             Please check server_host, server_port and port in your config.
                                             Error %r"""
                     logger.exception(message % (tunnel_process.remote_host, tunnel_process.remote_port, e))
@@ -248,7 +260,7 @@ def test_tunnels(files, logger, test_reverse_forward=True):
 
         except Exception as e:
             failed = True
-            logger.exception("Failed to establish tunnel %s with error %r" %
+            logger.exception("Failed to establish connector %s with error %r" %
                              (tunnel_process.tunnel_name, e))
     return failed
 
@@ -331,20 +343,20 @@ def check_tunnels(files, items, logger, processes, to_restart, pool, pooled_send
             proc.terminate()
             del processes[key]
             to_restart.append(key)
-            logger.info("Tunnel %s is down", files[key])
+            logger.info("Connector %s is down", files[key])
             pooled_sender.send_alert(proc.tunnel_name)
         else:
-            logger.debug("Tunnel %s is up", files[key])
+            logger.debug("Connector %s is up", files[key])
 
 
 def restart_tunnels(files, logger, processes, to_restart, alert_senders, status):
     for each in to_restart:
-        logger.info("Going to restart tunnel from file %s", files[each])
+        logger.info("Going to restart connector from file %s", files[each])
         tunnel_process = TunnelProcess.from_config_file(files[each], alert_senders)
         processes[each] = tunnel_process
         tunnel_process.start()
         status.start_tunnel(files[each])
-        logger.info("Tunnel %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
+        logger.info("Connector %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
 
 
 def register_signal_handlers(processes, pool):
@@ -367,17 +379,17 @@ def start_tunnels(files, logger, processes, alert_senders, status):
     for key, tunnel_process in processes.items():
         tunnel_process.start()
         status.start_tunnel(files[key])
-        logger.info("Tunnel %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
+        logger.info("Connector %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
 
 
 def create_tunnels_from_config(alert_senders, files, logger, processes):
     for each in range(len(files)):
         config_file = files[each]
-        logger.info("Going to start tunnel from file %s", config_file)
+        logger.info("Going to start connector from file %s", config_file)
         try:
             tunnel_process = TunnelProcess.from_config_file(config_file, alert_senders)
         except Exception as e:
-            logger.exception("Failed to create tunnel from file %s: %s", config_file, e)
+            logger.exception("Failed to create connector from file %s: %s", config_file, e)
             for pr in processes.values():
                 pr.terminate()
             sys.exit(1)

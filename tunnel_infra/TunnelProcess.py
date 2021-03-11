@@ -104,15 +104,21 @@ class TunnelProcess(multiprocessing.Process):
         config = configparser.ConfigParser()
         config.read(ini_file)
         directory = dirname(realpath(ini_file))
-        defaults = config['tunnel']
-        log_level = defaults.get('log_level')
+        if 'connector' in config:
+            defaults = config['connector']
+        else:
+            defaults = config['tunnel']
+        log_level = defaults.get('log_level', 'DEBUG')
         log_to_console = defaults.get('log_to_console', False)
         server_host = defaults['server_host']
         server_port = int(defaults.get('server_port', SSH_PORT))
         remote_host = defaults['remote_host']
         remote_port = int(defaults.get('remote_port', SSH_PORT))
         remote_port_to_forward = int(defaults.get('port', DEFAULT_PORT))
-        tunnel_name = defaults.get('tunnel_name', realpath(ini_file))
+        if 'connector_name' in defaults:
+            tunnel_name = defaults.get('connector_name', realpath(ini_file))
+        else:
+            tunnel_name = defaults.get('tunnel_name', realpath(ini_file))
         log_filename = os.path.basename(ini_file)
         log_filename = os.path.splitext(log_filename)[0] + ".log"
         key_file = defaults.get('keyfile')
