@@ -14,6 +14,7 @@ from os.path import isfile, join
 import coloredlogs
 from paramiko import BadHostKeyException, PasswordRequiredException, AuthenticationException, SSHException
 import psutil
+import win32serviceutil
 
 from alerts.email_alert import EmailAlertSender
 from alerts.http_post_alert import HTTPPostAlertSender
@@ -155,37 +156,58 @@ def test_everything(files, logger, processes):
     logger.info("We will check your installation and configuration")
     service_up = test_service_is_running(logger)
     if not service_up:
-        service_up = test_service_is_running(logger, service_name='InvgateConnector')
-    if not service_up:
         logger.info("The service is not running! You won't be able to access your services from the cloud")
+        service_up = start_service(logger)
     failed_connection = test_connections(files, logger, processes)
     if not failed_connection:
         logger.info("All the services are reachable!")
     else:
         logger.info("Not all the services were reachable, please check the output")
     if service_up:
-        logger.info(
-            "We will partially test the tunnels because the service is up. If you need further testing, please stop the service and repeat the test")
+        service_up = not stop_service()
     failed_tunnels = test_tunnels(files, logger, test_reverse_forward=not service_up)
     if not failed_tunnels:
         logger.info("All the connectors seem to work!")
     else:
         logger.info("Not all the connectors are working, check the output!")
+    if not service_up:
+        start_service(logger)
 
 
-def test_service_is_running(logger, service_name='InvGateTunnel'):
+def test_service_is_running(logger, service_name='InvGateConnector'):
     logger.info("Going to check the status of the service")
     if os.name == 'nt':
         try:
             service = psutil.win_service_get(service_name)
-            service = service.as_dict()
+            service_dict = service.as_dict()
         except Exception as e:
             return False
-        logger.info("%s Service is %s", service_name, service['status'])
-        return service['status'] == 'running'
+        logger.info("%s Service is %s", service_name, service_dict['status'])
+        return service_dict['status'] == 'running'
     else:
         logger.info("We are not running on windows")
     return False
+
+
+def start_service(logger, service_name='InvGateConnector'):
+    logger.info("Going to start the %s service", service_name)
+    try:
+        win32serviceutil.RestartService(service_name)
+        return True
+    except Exception as e:
+        logger.error('Failed to start the %s service', service_name)
+        return False
+
+
+def stop_service(logger, service_name='InvGateConnector'):
+    logger.info("Going to stop the %s service", service_name)
+    try:
+        win32serviceutil.StopService(service_name)
+        return True
+    except Exception as e:
+        logger.error('Failed to stop the %s service', service_name)
+        return False
+
 
 
 def test_tunnels_and_exit(files, logger, processes):
