@@ -9,3 +9,4 @@ email_validator==1.1.1
 requests==2.23.0
 psutil==5.7.2
 coloredlogs==14.0
+pywin32=300
