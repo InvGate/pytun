@@ -164,7 +164,7 @@ def test_everything(files, logger, processes):
     else:
         logger.info("Not all the services were reachable, please check the output")
     if service_up:
-        service_up = not stop_service()
+        service_up = not stop_service(logger)
     failed_tunnels = test_tunnels(files, logger, test_reverse_forward=not service_up)
     if not failed_tunnels:
         logger.info("All the connectors seem to work!")
