@@ -110,8 +110,13 @@ def main():
         test_tunnels_and_exit(files, logger, processes)
 
     if args.test_all:
+        http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, Status(), __version__,
+                                                 params.getint('inspection_port'), logger,
+                                                 only_local=bool(params.getboolean('inspection_localhost_only', True)))
+        http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
+        http_inspection_thread.daemon = True
         coloredlogs.install(level='DEBUG', logger=logger)
-        test_everything(files, logger, processes)
+        test_everything(files, logger, processes, introspection_thread=http_inspection_thread)
         logger.info("Press Enter to continue...")
         input()
         sys.exit(0)
@@ -151,13 +156,15 @@ def main():
         time.sleep(30)
 
 
-def test_everything(files, logger, processes):
+def test_everything(files, logger, processes, introspection_thread=None):
     logger.info("We will check your installation and configuration")
     service_up = test_service_is_running(logger)
     if not service_up:
         service_up = test_service_is_running(logger, service_name='InvgateConnector')
     if not service_up:
         logger.info("The service is not running! You won't be able to access your services from the cloud")
+        if introspection_thread:
+            introspection_thread.start()
     failed_connection = test_connections(files, logger, processes)
     if not failed_connection:
         logger.info("All the services are reachable!")
