@@ -110,11 +110,20 @@ def main():
         test_tunnels_and_exit(files, logger, processes)
 
     if args.test_all:
-        http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, Status(), __version__,
-                                                 params.getint('inspection_port'), logger,
-                                                 only_local=bool(params.getboolean('inspection_localhost_only', True)))
-        http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
-        http_inspection_thread.daemon = True
+        http_inspection_thread = None
+        inspection_port = params.getint('inspection_port')
+        if params == {}:
+            logger.info('Failed to load the ini file.')
+        elif tunnel_path is None:
+            logger.info('Tunnel path is invalid.')
+        elif inspection_port is None:
+            logger.info('Introspection port is invalid')
+        else:
+            http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, Status(), __version__,
+                                                     inspection_port, logger,
+                                                     only_local=bool(params.getboolean('inspection_localhost_only', True)))
+            http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
+            http_inspection_thread.daemon = True
         coloredlogs.install(level='DEBUG', logger=logger)
         test_everything(files, logger, processes, introspection_thread=http_inspection_thread)
         logger.info("Press Enter to continue...")
