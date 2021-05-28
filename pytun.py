@@ -115,11 +115,9 @@ def main():
             logger.info('Failed to load the ini file.')
         elif tunnel_path is None:
             logger.info('Tunnel path is invalid.')
-        elif params.getint('inspection_port') is None:
-            logger.info('Introspection port is invalid')
         else:
             http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, Status(), __version__,
-                                                     params.getint('inspection_port'), logger,
+                                                     params.getint('inspection_port', 9999), logger,
                                                      only_local=bool(params.getboolean('inspection_localhost_only', True)))
             http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
             http_inspection_thread.daemon = True
@@ -145,7 +143,7 @@ def main():
     register_signal_handlers(processes, pool)
 
     http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, status, __version__,
-                                             params.getint('inspection_port'), logger,
+                                             params.getint('inspection_port', 9999), logger,
                                              only_local=bool(params.getboolean('inspection_localhost_only', True)))
     http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
     http_inspection_thread.daemon = True
