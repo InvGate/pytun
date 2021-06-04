@@ -57,10 +57,11 @@ class TunnelProcess(multiprocessing.Process):
     def run(self):
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
-        client = self.ssh_connect()
         LogManager.path = self.log_path
         self.logger = LogManager.configure_logger(self.log_filename, self.log_level, self.log_to_console,
                                                   name="pytun-tunnel")
+        client = self.ssh_connect()
+
         self.logger.info(
             "Now forwarding remote port %d to %s:%d ..."
             % (self.remote_port_to_forward, self.remote_host, self.remote_port)
