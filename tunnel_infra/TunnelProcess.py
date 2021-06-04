@@ -17,6 +17,7 @@ DEFAULT_PORT = 4000
 
 
 class TunnelProcess(multiprocessing.Process):
+    log_path = './logs'
 
     def __init__(self, tunnel_name, server_host, server_port, server_key, user_to_login, key_file, remote_port_to_forward,
                  remote_host, remote_port, keep_alive_time, log_level, log_to_console, alert_senders=None,
@@ -24,7 +25,8 @@ class TunnelProcess(multiprocessing.Process):
         if log_filename is None:
             log_filename = os.path.splitext(os.path.basename(tunnel_name))[0] + ".log"
         self.log_filename = log_filename
-        self.log_path = log_path
+        if log_path:
+            TunnelProcess.log_path = log_path
         self.tunnel_name = tunnel_name
         self.server_host = server_host
         self.server_port = server_port
@@ -50,7 +52,7 @@ class TunnelProcess(multiprocessing.Process):
         sys.exit(0)
 
     def run(self):
-        LogManager.path = self.log_path
+        LogManager.path = TunnelProcess.log_path
         self.logger = LogManager.configure_logger(self.log_filename, self.log_level, self.log_to_console,
                                                   name="pytun-tunnel")
         signal.signal(signal.SIGINT, self.exit_gracefully)
@@ -114,14 +116,6 @@ class TunnelProcess(multiprocessing.Process):
             defaults = config['tunnel']
         log_level = defaults.get('log_level', 'DEBUG')
         log_to_console = defaults.get('log_to_console', False)
-        log_path = defaults.get('log_path', './logs')
-        if not isabs(log_path):
-            log_path = join(dirname(realpath(__file__)), log_path)
-            # Hack: sometimes when running on windows with pyinstaller and shawl a "\\?\" is added to cwd and it fails
-            if log_path.startswith("\\\\?\\"):
-                log_path = log_path.replace("\\\\?\\", "")
-            if not os.path.isdir(log_path):
-                os.mkdir(log_path)
         server_host = defaults['server_host']
         server_port = int(defaults.get('server_port', SSH_PORT))
         remote_host = defaults['remote_host']
@@ -143,5 +137,5 @@ class TunnelProcess(multiprocessing.Process):
         tunnel_process = TunnelProcess(tunnel_name, server_host, server_port, server_key, user_to_login, key_file,
                                        remote_port_to_forward, remote_host, remote_port, keep_alive_time, log_level,
                                        log_to_console, alert_senders=alert_senders, log_filename=log_filename,
-                                       log_path=log_path)
+                                       log_path=TunnelProcess.log_path)
         return tunnel_process
