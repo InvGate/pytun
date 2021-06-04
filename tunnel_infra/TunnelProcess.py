@@ -115,6 +115,13 @@ class TunnelProcess(multiprocessing.Process):
         log_level = defaults.get('log_level', 'DEBUG')
         log_to_console = defaults.get('log_to_console', False)
         log_path = defaults.get('log_path', './logs')
+        if not isabs(log_path):
+            log_path = join(dirname(realpath(__file__)), log_path)
+            # Hack: sometimes when running on windows with pyinstaller and shawl a "\\?\" is added to cwd and it fails
+            if log_path.startswith("\\\\?\\"):
+                log_path = log_path.replace("\\\\?\\", "")
+            if not os.path.isdir(log_path):
+                os.mkdir(log_path)
         server_host = defaults['server_host']
         server_port = int(defaults.get('server_port', SSH_PORT))
         remote_host = defaults['remote_host']
