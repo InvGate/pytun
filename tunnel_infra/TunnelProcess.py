@@ -29,8 +29,6 @@ class TunnelProcess(multiprocessing.Process):
             self.log_path = log_path
         else:
             self.log_path = TunnelProcess.default_log_path
-
-        print('ssssssssssssssss',self.log_path)
         self.tunnel_name = tunnel_name
         self.server_host = server_host
         self.server_port = server_port
@@ -47,9 +45,6 @@ class TunnelProcess(multiprocessing.Process):
         self.log_to_console = log_to_console
         self.alert_senders = alert_senders
 
-        LogManager.path = self.log_path
-        self.logger = LogManager.configure_logger(self.log_filename, self.log_level, self.log_to_console,
-                                                  name="pytun-tunnel")
         super().__init__()
 
     def exit_gracefully(self, *args):
@@ -63,7 +58,9 @@ class TunnelProcess(multiprocessing.Process):
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         client = self.ssh_connect()
-
+        LogManager.path = self.log_path
+        self.logger = LogManager.configure_logger(self.log_filename, self.log_level, self.log_to_console,
+                                                  name="pytun-tunnel")
         self.logger.info(
             "Now forwarding remote port %d to %s:%d ..."
             % (self.remote_port_to_forward, self.remote_host, self.remote_port)
@@ -142,5 +139,5 @@ class TunnelProcess(multiprocessing.Process):
         tunnel_process = TunnelProcess(tunnel_name, server_host, server_port, server_key, user_to_login, key_file,
                                        remote_port_to_forward, remote_host, remote_port, keep_alive_time, log_level,
                                        log_to_console, alert_senders=alert_senders, log_filename=log_filename,
-                                       log_path=TunnelProcess.default_log_path)
+                                       log_path=TunnelProcess.log_path)
         return tunnel_process
