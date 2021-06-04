@@ -139,5 +139,5 @@ class TunnelProcess(multiprocessing.Process):
         tunnel_process = TunnelProcess(tunnel_name, server_host, server_port, server_key, user_to_login, key_file,
                                        remote_port_to_forward, remote_host, remote_port, keep_alive_time, log_level,
                                        log_to_console, alert_senders=alert_senders, log_filename=log_filename,
-                                       log_path=TunnelProcess.log_path)
+                                       log_path=TunnelProcess.default_log_path)
         return tunnel_process
