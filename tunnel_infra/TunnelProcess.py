@@ -57,7 +57,7 @@ class TunnelProcess(multiprocessing.Process):
     def run(self):
         LogManager.path = self.log_path
         self.logger = LogManager.configure_logger(self.log_filename, self.log_level, self.log_to_console,
-                                                  name="pytun-tunnel")
+                                                  name="pyconn-coonnector")
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         client = self.ssh_connect()
