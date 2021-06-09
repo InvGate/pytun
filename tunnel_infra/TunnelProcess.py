@@ -17,12 +17,18 @@ DEFAULT_PORT = 4000
 
 
 class TunnelProcess(multiprocessing.Process):
+    default_log_path = './logs'
 
     def __init__(self, tunnel_name, server_host, server_port, server_key, user_to_login, key_file, remote_port_to_forward,
-                 remote_host, remote_port, keep_alive_time, log_level, log_to_console, alert_senders=None, log_filename=None):
+                 remote_host, remote_port, keep_alive_time, log_level, log_to_console, alert_senders=None,
+                 log_filename=None, log_path=None):
         if log_filename is None:
             log_filename = os.path.splitext(os.path.basename(tunnel_name))[0] + ".log"
         self.log_filename = log_filename
+        if log_path:
+            self.log_path = log_path
+        else:
+            self.log_path = TunnelProcess.default_log_path
         self.tunnel_name = tunnel_name
         self.server_host = server_host
         self.server_port = server_port
@@ -38,6 +44,7 @@ class TunnelProcess(multiprocessing.Process):
         self.log_level = log_level
         self.log_to_console = log_to_console
         self.alert_senders = alert_senders
+
         super().__init__()
 
     def exit_gracefully(self, *args):
@@ -48,7 +55,9 @@ class TunnelProcess(multiprocessing.Process):
         sys.exit(0)
 
     def run(self):
-        self.logger = LogManager.configure_logger(self.log_filename, self.log_level, self.log_to_console, name="pytun-tunnel")
+        LogManager.path = self.log_path
+        self.logger = LogManager.configure_logger(self.log_filename, self.log_level, self.log_to_console,
+                                                  name="pyconn-connector")
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         client = self.ssh_connect()
@@ -133,5 +142,6 @@ class TunnelProcess(multiprocessing.Process):
         keep_alive_time = int(defaults.get("keep_alive_time", DEFAULT_KEEP_ALIVE_TIME))
         tunnel_process = TunnelProcess(tunnel_name, server_host, server_port, server_key, user_to_login, key_file,
                                        remote_port_to_forward, remote_host, remote_port, keep_alive_time, log_level,
-                                       log_to_console, alert_senders=alert_senders, log_filename=log_filename)
+                                       log_to_console, alert_senders=alert_senders, log_filename=log_filename,
+                                       log_path=TunnelProcess.default_log_path)
         return tunnel_process

@@ -5,7 +5,7 @@ from logging.handlers import TimedRotatingFileHandler
 
 class LogManager:
 
-    path = "./"
+    path = "./logs"
 
     @staticmethod
     def configure_logger(filename, level=None, log_to_console=False, name="pytun"):
