@@ -66,7 +66,7 @@ class Tunnel(object):
             self.transport.send_ignore()
         except Exception as e:
             self.logger.exception("Connector down! %s", e)
-            self.failed=True
+            self.failed = True
             return
         if not self.transport.is_active():
             self.logger.exception("Connector down! Transport is not active")
