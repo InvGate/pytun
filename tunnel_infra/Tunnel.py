@@ -83,20 +83,23 @@ class Tunnel(object):
         self.timer.start()
 
     def reverse_forward_tunnel(self):
-        self.transport.request_port_forward("", self.server_port)
-        self.timer = threading.Timer(30, self.validate_tunnel_up)
-        self.timer.start()
-        while True:
-            chan = self.transport.accept(10)
-            if self.failed:
-                return
-            if chan is None:
-                continue
-            thr = threading.Thread(
-                target=self.handler, args=(chan, self.remote_host, self.remote_port)
-            )
-            thr.setDaemon(True)
-            thr.start()
+        try:
+            self.transport.request_port_forward("", self.server_port)
+            self.timer = threading.Timer(30, self.validate_tunnel_up)
+            self.timer.start()
+            while True:
+                chan = self.transport.accept(10)
+                if self.failed:
+                    return
+                if chan is None:
+                    continue
+                thr = threading.Thread(
+                    target=self.handler, args=(chan, self.remote_host, self.remote_port)
+                )
+                thr.setDaemon(True)
+                thr.start()
+        except Exception as e:
+            self.logger.exception("Failed to forward")
 
     def stop(self):
         if self.timer:
