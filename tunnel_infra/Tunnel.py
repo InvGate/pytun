@@ -7,14 +7,15 @@ from paramiko import SSHException
 
 class Tunnel(object):
 
-    def __init__(self, name, server_port, remote_host, remote_port, transport, logger, keep_alive_time=30,
+    def __init__(self, name, server_port, remote_host, remote_port, client, logger, keep_alive_time=30,
                  alert_senders=None):
         self.name = name
         self.timer = None
         self.server_port = server_port
         self.remote_host = remote_host
         self.remote_port = remote_port
-        self.transport = transport
+        self.client = client
+        self.transport = client.get_transport()
         self.logger = logger
         self.keep_alive_time = keep_alive_time
         self.alert_senders = alert_senders
@@ -100,6 +101,8 @@ class Tunnel(object):
                 thr.start()
         except Exception as e:
             self.logger.exception("Failed to forward")
+            self.logger.debug("Restarting the SSH Transport")
+            self.transport = self.client.get_transport()
 
     def stop(self):
         if self.timer:

@@ -67,7 +67,7 @@ class TunnelProcess(multiprocessing.Process):
             % (self.remote_port_to_forward, self.remote_host, self.remote_port)
         )
         try:
-            tunnel = Tunnel(self.tunnel_name, self.remote_port_to_forward, self.remote_host, self.remote_port, client.get_transport(),
+            tunnel = Tunnel(self.tunnel_name, self.remote_port_to_forward, self.remote_host, self.remote_port, client,
                             self.logger, keep_alive_time=self.keep_alive_time, alert_senders=self.alert_senders)
             self.tunnel = tunnel
             tunnel.reverse_forward_tunnel()
