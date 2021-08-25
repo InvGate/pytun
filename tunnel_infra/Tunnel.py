@@ -15,7 +15,7 @@ class Tunnel(object):
         self.remote_host = remote_host
         self.remote_port = remote_port
         self.client = client
-        self.transport = client.get_transport()
+        self.transport = None
         self.logger = logger
         self.keep_alive_time = keep_alive_time
         self.alert_senders = alert_senders
@@ -85,6 +85,7 @@ class Tunnel(object):
 
     def reverse_forward_tunnel(self):
         try:
+            self.transport = self.client.get_transport()
             self.transport.request_port_forward("", self.server_port)
             self.timer = threading.Timer(30, self.validate_tunnel_up)
             self.timer.start()
@@ -101,8 +102,6 @@ class Tunnel(object):
                 thr.start()
         except Exception as e:
             self.logger.exception("Failed to forward")
-            self.logger.debug("Restarting the SSH Transport")
-            self.transport = self.client.get_transport()
 
     def stop(self):
         if self.timer:
