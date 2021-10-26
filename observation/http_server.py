@@ -138,10 +138,9 @@ class RequestHandlerClassFactory:
         return TunnelRequestHandler
 
 
-def inspection_http_server(config_path, tunnel_manager_id, log_path, status, version_string, port, logger,
-                           only_local=True):
+def inspection_http_server(config_path, tunnel_manager_id, log_path, status, version_string, address, logger):
     handler_class = RequestHandlerClassFactory().get_handler(config_path, tunnel_manager_id, log_path, status,
                                                              version_string, logger)
-    address = ("127.0.0.1" if only_local else "0.0.0.0", port)
+
     http_server = HttpServer(address, handler_class)
     return http_server

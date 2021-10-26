@@ -111,18 +111,25 @@ def main():
         test_tunnels_and_exit(files, logger, processes)
 
     if args.test_all:
+        coloredlogs.install(level='DEBUG', logger=logger)
         http_inspection_thread = None
+
         if params == {}:
             logger.info('Failed to load the ini file.')
         elif tunnel_path is None:
             logger.info('Tunnel path is invalid.')
         else:
-            http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, Status(), __version__,
-                                                     params.getint('inspection_port', 9999), logger,
-                                                     only_local=bool(params.getboolean('inspection_localhost_only', True)))
-            http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
-            http_inspection_thread.daemon = True
-        coloredlogs.install(level='DEBUG', logger=logger)
+            try:
+                address = get_inspection_address(params)
+                http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, Status(),
+                                                         __version__,
+                                                         address, logger)
+                http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
+                http_inspection_thread.daemon = True
+            except OSError as e:
+                logger.exception(
+                    f"Couldn't start inspection HTTP server. Address {address[0]}:{address[1]} already in use. "
+                    f"Exception: {e}")
         test_everything(files, logger, processes, introspection_thread=http_inspection_thread)
         logger.info("Press Enter to continue...")
         input()
@@ -144,8 +151,7 @@ def main():
     register_signal_handlers(processes, pool)
 
     http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, status, __version__,
-                                             params.getint('inspection_port', 9999), logger,
-                                             only_local=bool(params.getboolean('inspection_localhost_only', True)))
+                                             get_inspection_address(params), logger)
     http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
     http_inspection_thread.daemon = True
     http_inspection_thread.start()
@@ -161,6 +167,11 @@ def main():
             http_inspection_thread.daemon = True
             http_inspection_thread.start()
         time.sleep(30)
+
+
+def get_inspection_address(params):
+    only_local = bool(params.getboolean('inspection_localhost_only', True))
+    return "127.0.0.1" if only_local else "0.0.0.0", params.getint('inspection_port', 9999)
 
 
 def test_everything(files, logger, processes, introspection_thread=None):
