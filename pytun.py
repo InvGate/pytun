@@ -111,7 +111,9 @@ def main():
         test_tunnels_and_exit(files, logger, processes)
 
     if args.test_all:
+        coloredlogs.install(level='DEBUG', logger=logger)
         http_inspection_thread = None
+
         if params == {}:
             logger.info('Failed to load the ini file.')
         elif tunnel_path is None:
@@ -128,7 +130,6 @@ def main():
                 logger.exception(
                     f"Couldn't start inspection HTTP server. Address {address[0]}:{address[1]} already in use. "
                     f"Exception: {e}")
-        coloredlogs.install(level='DEBUG', logger=logger)
         test_everything(files, logger, processes, introspection_thread=http_inspection_thread)
         logger.info("Press Enter to continue...")
         input()
