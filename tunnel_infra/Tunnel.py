@@ -7,14 +7,15 @@ from paramiko import SSHException
 
 class Tunnel(object):
 
-    def __init__(self, name, server_port, remote_host, remote_port, transport, logger, keep_alive_time=30,
+    def __init__(self, name, server_port, remote_host, remote_port, client, logger, keep_alive_time=30,
                  alert_senders=None):
         self.name = name
         self.timer = None
         self.server_port = server_port
         self.remote_host = remote_host
         self.remote_port = remote_port
-        self.transport = transport
+        self.client = client
+        self.transport = None
         self.logger = logger
         self.keep_alive_time = keep_alive_time
         self.alert_senders = alert_senders
@@ -66,7 +67,7 @@ class Tunnel(object):
             self.transport.send_ignore()
         except Exception as e:
             self.logger.exception("Connector down! %s", e)
-            self.failed=True
+            self.failed = True
             return
         if not self.transport.is_active():
             self.logger.exception("Connector down! Transport is not active")
@@ -83,20 +84,24 @@ class Tunnel(object):
         self.timer.start()
 
     def reverse_forward_tunnel(self):
-        self.transport.request_port_forward("", self.server_port)
-        self.timer = threading.Timer(30, self.validate_tunnel_up)
-        self.timer.start()
-        while True:
-            chan = self.transport.accept(10)
-            if self.failed:
-                return
-            if chan is None:
-                continue
-            thr = threading.Thread(
-                target=self.handler, args=(chan, self.remote_host, self.remote_port)
-            )
-            thr.setDaemon(True)
-            thr.start()
+        try:
+            self.transport = self.client.get_transport()
+            self.transport.request_port_forward("", self.server_port)
+            self.timer = threading.Timer(30, self.validate_tunnel_up)
+            self.timer.start()
+            while True:
+                chan = self.transport.accept(10)
+                if self.failed:
+                    return
+                if chan is None:
+                    continue
+                thr = threading.Thread(
+                    target=self.handler, args=(chan, self.remote_host, self.remote_port)
+                )
+                thr.setDaemon(True)
+                thr.start()
+        except Exception as e:
+            self.logger.exception("Failed to forward")
 
     def stop(self):
         if self.timer:
