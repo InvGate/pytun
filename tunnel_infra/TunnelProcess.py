@@ -56,11 +56,10 @@ class TunnelProcess(multiprocessing.Process):
 
     def run(self):
         self.logger = LogManager.configure_logger(self.log_filename, self.log_level, self.log_to_console,
-                                                  name="pyconn-connector")
+                                                  name="pyconn-connector", path=self.log_path)
         self.logger.info("Starting TunnelProcess with the process id: %s", self.pid)
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
-        LogManager.path = self.log_path
         client = self.ssh_connect()
         self.logger.info(
             "Now forwarding remote port %d to %s:%d ..."
