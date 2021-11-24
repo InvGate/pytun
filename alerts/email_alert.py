@@ -6,7 +6,7 @@ from email_validator import validate_email
 
 from alerts.alert_sender import AlertSender
 
-SMTP_CONNECTION_TIMEOUT = 2
+SMTP_CONNECTION_TIMEOUT = 10
 
 
 class SecurityValues(enum.Enum):
