@@ -1,6 +1,9 @@
 from concurrent.futures.process import ProcessPoolExecutor
 from concurrent.futures.thread import  ThreadPoolExecutor
 from multiprocessing import Process
+
+from ratelimit import RateLimitException
+
 from alerts.alert_sender import AlertSender
 
 
@@ -20,11 +23,15 @@ class PooledAlerter(AlertSender):
 
     def send_alert(self, tunnel_name, message=None, exception_on_failure=False):
         for each in self.alerters:
-            future = self.pool.submit(each.send_alert, tunnel_name, message, exception_on_failure)
-            if exception_on_failure:
-                error = future.exception()
-                if error:
-                    raise error
+            try:
+                future = self.pool.submit(each.send_alert, tunnel_name, message, exception_on_failure)
+            except RateLimitException:
+                pass
+            else:
+                if exception_on_failure:
+                    error = future.exception()
+                    if error:
+                        raise error
 
 
 class DifferentThreadAlert(PooledAlerter):
