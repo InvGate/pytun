@@ -5,7 +5,7 @@ from email.mime.text import MIMEText
 from email_validator import validate_email
 
 from alerts.alert_sender import AlertSender
-from lib import ratelimit_with_function_signature
+from lib import ratelimit_by_args
 
 SMTP_CONNECTION_TIMEOUT = 10
 SMTP_ALERT_RATE_LIMIT = 1800
@@ -43,7 +43,7 @@ class EmailAlertSender(AlertSender):
         self.receiver_email = validate_email(to_address).email
         self.logger = logger
 
-    @ratelimit_with_function_signature(calls=1, period=SMTP_ALERT_RATE_LIMIT)
+    @ratelimit_by_args(calls=1, period=SMTP_ALERT_RATE_LIMIT)
     def send_alert(self, tunnel_name, message=None, exception_on_failure=False):
         try:
             message = self._build_message(tunnel_name, message)

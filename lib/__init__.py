@@ -1,1 +1,1 @@
-from .ratelimit import ratelimit_with_function_signature
+from .ratelimit import ratelimit_by_args
