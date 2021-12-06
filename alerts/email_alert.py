@@ -8,7 +8,7 @@ from alerts.alert_sender import AlertSender
 from lib import ratelimit_by_args
 
 SMTP_CONNECTION_TIMEOUT = 10
-SMTP_ALERT_RATE_LIMIT = 1800
+SMTP_ALERT_RATE_LIMIT = 600  # 600 seconds = 10 min
 
 
 class SecurityValues(enum.Enum):
