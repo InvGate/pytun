@@ -138,7 +138,7 @@ def main():
     senders = [x for x in [smtp_sender, post_sender] if x is not None]
 
     pool = ThreadPoolExecutor(1)
-    main_sender = DifferentThreadAlert(senders, pool)
+    main_sender = DifferentThreadAlert(alerters=senders, logger=logger, process_pool=pool)
 
     status = Status()
 
@@ -166,7 +166,7 @@ def main():
             http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
             http_inspection_thread.daemon = True
             http_inspection_thread.start()
-        time.sleep(30)
+        time.sleep(5)
 
 
 def get_inspection_address(params):
@@ -364,6 +364,8 @@ def check_tunnels(files, items, logger, processes, to_restart, pool, pooled_send
                     processes[key].remote_host,
                     processes[key].remote_port)
         """
+        print(proc.tunnel_name)
+        pooled_sender.send_alert(proc.tunnel_name)
         if (not proc.is_alive()) and proc.exitcode is not None:
             proc.terminate()
             del processes[key]
@@ -372,6 +374,7 @@ def check_tunnels(files, items, logger, processes, to_restart, pool, pooled_send
             pooled_sender.send_alert(proc.tunnel_name)
         else:
             logger.debug("Connector %s is up", files[key])
+
 
 
 def restart_tunnels(files, logger, processes, to_restart, alert_senders, status):

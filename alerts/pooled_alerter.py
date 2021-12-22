@@ -12,8 +12,9 @@ class PooledAlerter(AlertSender):
     def get_default_pool(self):
         raise NotImplementedError()
 
-    def __init__(self, alerters, process_pool=None):
+    def __init__(self, alerters, logger, process_pool=None):
         self.alerters = alerters
+        self.logger = logger
         if process_pool is None:
             process_pool = ProcessPoolExecutor(1)
         self.pool = process_pool
@@ -23,15 +24,14 @@ class PooledAlerter(AlertSender):
 
     def send_alert(self, tunnel_name, message=None, exception_on_failure=False):
         for each in self.alerters:
-            try:
-                future = self.pool.submit(each.send_alert, tunnel_name, message, exception_on_failure)
-            except RateLimitException:
-                pass
-            else:
-                if exception_on_failure:
-                    error = future.exception()
-                    if error:
-                        raise error
+            future = self.pool.submit(each.send_alert, tunnel_name, message, exception_on_failure)
+
+            error = future.exception()
+            if isinstance(error, RateLimitException):
+                self.logger.warning(f"Rate limit exceeded for tunnel '{tunnel_name}'")
+
+            if exception_on_failure and error:
+                raise error
 
 
 class DifferentThreadAlert(PooledAlerter):
