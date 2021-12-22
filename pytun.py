@@ -166,7 +166,7 @@ def main():
             http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
             http_inspection_thread.daemon = True
             http_inspection_thread.start()
-        time.sleep(5)
+        time.sleep(30)
 
 
 def get_inspection_address(params):
@@ -364,8 +364,6 @@ def check_tunnels(files, items, logger, processes, to_restart, pool, pooled_send
                     processes[key].remote_host,
                     processes[key].remote_port)
         """
-        print(proc.tunnel_name)
-        pooled_sender.send_alert(proc.tunnel_name)
         if (not proc.is_alive()) and proc.exitcode is not None:
             proc.terminate()
             del processes[key]

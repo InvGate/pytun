@@ -28,7 +28,9 @@ class PooledAlerter(AlertSender):
 
             error = future.exception()
             if isinstance(error, RateLimitException):
-                self.logger.warning(f"Rate limit exceeded for tunnel '{tunnel_name}'")
+                self.logger.warning(f"{each.__class__.__name__} rate limit exceeded "
+                                    f"while sending alert for tunnel {tunnel_name}. "
+                                    f"The alert will not be sent until the rate limiter allows it")
 
             if exception_on_failure and error:
                 raise error
