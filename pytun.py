@@ -138,7 +138,7 @@ def main():
     senders = [x for x in [smtp_sender, post_sender] if x is not None]
 
     pool = ThreadPoolExecutor(1)
-    main_sender = DifferentThreadAlert(senders, pool)
+    main_sender = DifferentThreadAlert(alerters=senders, logger=logger, process_pool=pool)
 
     status = Status()
 
@@ -372,6 +372,7 @@ def check_tunnels(files, items, logger, processes, to_restart, pool, pooled_send
             pooled_sender.send_alert(proc.tunnel_name)
         else:
             logger.debug("Connector %s is up", files[key])
+
 
 
 def restart_tunnels(files, logger, processes, to_restart, alert_senders, status):
