@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 from logging.handlers import TimedRotatingFileHandler
 from os.path import join, dirname, realpath
 
@@ -26,6 +27,7 @@ class LogManager:
             log_handler = TimedRotatingFileHandler(filename=os.path.join(path, filename), when="midnight",
                                                    backupCount=30)
         log_formatter = logging.Formatter('%(asctime)s %(process)d %(name)-12s %(levelname)-8s %(message)s')
+        log_formatter.converter = time.gmtime
         log_handler.setFormatter(log_formatter)
         log_handler.setLevel(level)
         console_handler = None
