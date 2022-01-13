@@ -72,15 +72,16 @@ class TunnelProcess(multiprocessing.Process):
             tunnel.reverse_forward_tunnel()
             sys.exit(0)
         except KeyboardInterrupt:
-            if tunnel.timer:
-                tunnel.timer.cancel()
             self.logger.info("Port forwarding stopped.")
             sys.exit(0)
         except Exception as e:
-            if tunnel.timer:
-                tunnel.timer.cancel()
             self.logger.exception("Port forwarding stopped with error %s", e)
             sys.exit(1)
+        finally:
+            if self.tunnel:
+                self.tunnel.stop()
+
+
 
     def ssh_connect(self, exit_on_failure=True):
         try:
