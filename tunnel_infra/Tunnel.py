@@ -106,9 +106,12 @@ class Tunnel(object):
     def stop(self):
         if self.timer:
             self.timer.cancel()
+            self.timer = None
+
         if self.transport:
             try:
                 self.transport.cancel_port_forward("", self.server_port)
+                self.transport = None
             except Exception:
                 pass
 
