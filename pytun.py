@@ -32,6 +32,7 @@ INI_FILENAME = 'connector.ini'
 
 
 def main():
+    application_path = get_application_path()
     parser = argparse.ArgumentParser(description='Tunnel')
     parser.add_argument("--config_ini", dest="config_ini", help="Configuration file to use", default=INI_FILENAME,
                         type=PathType(dash_ok=False))
@@ -53,12 +54,12 @@ def main():
     args = parser.parse_args()
     config = configparser.ConfigParser()
     if not isabs(args.config_ini):
-        ini_path = join(dirname(realpath(__file__)), args.config_ini)
+        ini_path = join(application_path, args.config_ini)
     else:
         ini_path = args.config_ini
-    pytun_ini_path = join(dirname(realpath(__file__)), 'pytun.ini')
-    if os.path.isfile(pytun_ini_path) and not os.path.isfile(join(dirname(realpath(__file__)), INI_FILENAME)):
-        os.rename(pytun_ini_path, join(dirname(realpath(__file__)), INI_FILENAME))
+    pytun_ini_path = join(application_path, 'pytun.ini')
+    if os.path.isfile(pytun_ini_path) and not os.path.isfile(join(application_path, INI_FILENAME)):
+        os.rename(pytun_ini_path, join(application_path, INI_FILENAME))
     if os.path.isfile(ini_path):
         config.read(ini_path)
         if 'config-connector' in config:
@@ -71,7 +72,7 @@ def main():
     tunnel_manager_id = params.get("tunnel_manager_id", '')
     log_path = params.get("log_path", './logs')
     if not isabs(log_path):
-        log_path = join(dirname(realpath(__file__)), log_path)
+        log_path = join(application_path, log_path)
         # Hack: sometimes when running on windows with pyinstaller and shawl a "\\?\" is added to cwd and it fails
         if log_path.startswith("\\\\?\\"):
             log_path = log_path.replace("\\\\?\\", "")
@@ -96,11 +97,10 @@ def main():
     tunnel_path = params.get("tunnel_dirs", "configs")
 
     if not isabs(args.config_ini):
-        tunnel_path = join(dirname(realpath(__file__)), tunnel_path)
+        tunnel_path = join(application_path, tunnel_path)
         # Hack: sometimes when running on windows with pyinstaller and shawl a "\\?\" is added to cwd and it fails
         if tunnel_path.startswith("\\\\?\\"):
             tunnel_path = tunnel_path.replace("\\\\?\\", "")
-
     files = [join(tunnel_path, f) for f in listdir(tunnel_path) if isfile(join(tunnel_path, f)) and f[-4:] == '.ini']
     processes = {}
 
@@ -167,6 +167,13 @@ def main():
             http_inspection_thread.daemon = True
             http_inspection_thread.start()
         time.sleep(30)
+
+
+def get_application_path():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    else:
+        return os.path.dirname(os.path.abspath(__file__))
 
 
 def get_inspection_address(params):
@@ -372,7 +379,6 @@ def check_tunnels(files, items, logger, processes, to_restart, pool, pooled_send
             pooled_sender.send_alert(proc.tunnel_name)
         else:
             logger.debug("Connector %s is up", files[key])
-
 
 
 def restart_tunnels(files, logger, processes, to_restart, alert_senders, status):

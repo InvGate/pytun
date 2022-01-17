@@ -4,6 +4,8 @@ import time
 from logging.handlers import TimedRotatingFileHandler
 from os.path import join, dirname, realpath
 
+from pytun import get_application_path
+
 
 class LogManager:
     _fallback_path = "./logs"
@@ -22,7 +24,7 @@ class LogManager:
             log_handler = TimedRotatingFileHandler(filename=os.path.join(path, filename), when="midnight",
                                                    backupCount=30)
         except FileNotFoundError:
-            path = join(dirname(realpath(__file__)), LogManager._fallback_path)
+            path = join(get_application_path(), LogManager._fallback_path)
             os.makedirs(path)
             log_handler = TimedRotatingFileHandler(filename=os.path.join(path, filename), when="midnight",
                                                    backupCount=30)
