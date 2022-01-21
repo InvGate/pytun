@@ -2,9 +2,9 @@ import os
 import logging
 import time
 from logging.handlers import TimedRotatingFileHandler
-from os.path import join, dirname, realpath
+from os.path import join
 
-from pytun import get_application_path
+from utils import get_application_path
 
 
 class LogManager:

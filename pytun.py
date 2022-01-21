@@ -24,6 +24,7 @@ from observation.http_server import inspection_http_server
 from observation.status import Status
 from tunnel_infra.TunnelProcess import TunnelProcess
 from tunnel_infra.pathtype import PathType
+from utils import get_application_path
 from version import __version__
 
 freeze_support()
@@ -167,14 +168,6 @@ def main():
             http_inspection_thread.daemon = True
             http_inspection_thread.start()
         time.sleep(30)
-
-
-def get_application_path():
-    # hack to get the application path
-    if getattr(sys, 'frozen', False):   # check if the application is running as a bundle
-        return os.path.dirname(sys.executable)
-    else:
-        return os.path.dirname(os.path.abspath(__file__))
 
 
 def get_inspection_address(params):
