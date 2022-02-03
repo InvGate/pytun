@@ -15,7 +15,7 @@ def ratelimit_by_args(*args, **kwargs):
         def wrapper(*func_args, **func_kwargs):
             f_args_str = "__".join(f"{x}" for x in func_args) + "_" + "__".join(
                 f"{x}" for x in sorted(func_kwargs.items()))
-            func_signature = f"'{func.__name__}{f_args_str}'"
+            func_signature = f'"{func.__name__}{f_args_str}"'
 
             if func_signature not in rate_limits:
                 name = getattr(kwargs, 'name', func_signature)
