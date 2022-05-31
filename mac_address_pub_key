@@ -1,0 +1,2 @@
+Add here the public key to verify MAC address signature.
+Used to verify that the MAC address signature in the config is valid.

@@ -1,5 +1,6 @@
 import argparse
 import configparser
+import logging
 import os
 import signal
 import socket
@@ -7,6 +8,7 @@ import sys
 import threading
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
+from json import JSONDecodeError
 from multiprocessing import freeze_support
 from os import listdir
 from os.path import isabs, dirname, realpath
@@ -19,7 +21,7 @@ from alerts.email_alert import EmailAlertSender
 from alerts.http_post_alert import HTTPPostAlertSender
 from alerts.pooled_alerter import DifferentThreadAlert
 from configure_logger import LogManager
-from observation.connection_check import ConnectionCheck
+from device_authorization import is_device_authorized
 from observation.http_server import inspection_http_server
 from observation.status import Status
 from tunnel_infra.TunnelProcess import TunnelProcess
@@ -119,19 +121,25 @@ def main():
             logger.info('Failed to load the ini file.')
         elif tunnel_path is None:
             logger.info('Tunnel path is invalid.')
+
+        if is_device_authorized(params):
+            if params and tunnel_path:
+                try:
+                    address = get_inspection_address(params)
+                    http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, Status(),
+                                                             __version__,
+                                                             address, logger)
+                    http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
+                    http_inspection_thread.daemon = True
+                except OSError as e:
+                    logger.exception(
+                        f"Couldn't start inspection HTTP server. Address {address[0]}:{address[1]} already in use. "
+                        f"Exception: {e}")
+
+            test_everything(files, logger, processes, introspection_thread=http_inspection_thread)
         else:
-            try:
-                address = get_inspection_address(params)
-                http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, Status(),
-                                                         __version__,
-                                                         address, logger)
-                http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
-                http_inspection_thread.daemon = True
-            except OSError as e:
-                logger.exception(
-                    f"Couldn't start inspection HTTP server. Address {address[0]}:{address[1]} already in use. "
-                    f"Exception: {e}")
-        test_everything(files, logger, processes, introspection_thread=http_inspection_thread)
+            logger.error("Can't start connector, this device is not authorized to run it.")
+
         logger.info("Press Enter to continue...")
         input()
         sys.exit(0)
@@ -140,6 +148,11 @@ def main():
 
     pool = ThreadPoolExecutor(1)
     main_sender = DifferentThreadAlert(alerters=senders, logger=logger, process_pool=pool)
+
+    if is_device_authorized(params):
+        main_sender.send_alert(tunnel_name=None, message="Connector down! The device where it is installed is not "
+                                                         "allowed to run it.")
+        sys.exit(1)
 
     status = Status()
 

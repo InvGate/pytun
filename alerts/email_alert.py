@@ -65,13 +65,19 @@ class EmailAlertSender(AlertSender):
                 raise e
 
     def _build_message(self, tunnel_name, message_text):
+        if not tunnel_name and not message_text:
+            raise ValueError("Can't build message without information about it. "
+                             "tunnel_name or message_text are required.")
+
         if message_text:
             message = MIMEText(message_text, 'plain')
         else:
             message = MIMEText(
-                "This email is to let you know that %s is down! Manager id: %s" % (tunnel_name, self.tunnel_manager_id),
-                'plain')
-        message["Subject"] = "Connector %s notification" % (tunnel_name,)
+                f"This email is to let you know that {tunnel_name} is down! Manager id: {self.tunnel_manager_id}",
+                'plain'
+            )
+
+        message["Subject"] = f"Connector {tunnel_name} notification" if tunnel_name else "Connector notification"
         message["From"] = self.sender_email
         message["To"] = self.receiver_email
         return message
