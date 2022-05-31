@@ -22,7 +22,7 @@ def get_net_if_mac_addresses():
 
 def is_device_authorized(params: dict) -> bool:
     """
-    Validates that the device that pytun is running on is "authorized".
+    Validates that the device that the connector is running on is "authorized".
     A device is considered authorized if it does not have the mac_address key in the params dict or
     if it has a network interface with a MAC address that matches the MAC address specified in the params dict
     with a valid signature.
