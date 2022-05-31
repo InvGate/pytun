@@ -149,9 +149,10 @@ def main():
     pool = ThreadPoolExecutor(1)
     main_sender = DifferentThreadAlert(alerters=senders, logger=logger, process_pool=pool)
 
-    if is_device_authorized(params):
-        main_sender.send_alert(tunnel_name=None, message="Connector down! The device where it is installed is not "
-                                                         "allowed to run it.")
+    if not is_device_authorized(params):
+        msg = "Connector down! The device where it is installed is not allowed to run it."
+        logger.critical(msg)
+        main_sender.send_alert(tunnel_name=None, message=msg)
         sys.exit(1)
 
     status = Status()
