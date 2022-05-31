@@ -26,7 +26,7 @@ def is_device_authorized(params: dict) -> bool:
     A device is considered authorized if it does not have the mac_address key in the params dict or
     if it has a network interface with a MAC address that matches the MAC address specified in the params dict
     with a valid signature.
-    This is meant to prevent the average user from running multiple pytun in the same infra. It is not meant to
+    This is meant to prevent users from running the connector in devices where it is not supposed to. It is not meant to
     prevent "malicious" users from doing it as MAC cloning is possible, making this validation useless.
 
     :param params: Pytun config object
