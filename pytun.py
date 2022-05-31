@@ -84,6 +84,14 @@ def main():
     LogManager.path = log_path
     TunnelProcess.default_log_path = log_path
     logger = LogManager.configure_logger('main_connector.log', params.get("log_level", "INFO"), test_something)
+
+    if (test_something or args.test_all) and not is_device_authorized(params):
+        coloredlogs.install(level='DEBUG', logger=logger)
+        logger.critical("Can't start connector, this device is not authorized to run it.")
+        logger.info("Press Enter to continue...")
+        input()
+        sys.exit(1)
+
     if tunnel_manager_id is None:
         logger.error("tunnel_manager_id not set in the config file")
         sys.exit(1)
@@ -121,25 +129,19 @@ def main():
             logger.info('Failed to load the ini file.')
         elif tunnel_path is None:
             logger.info('Tunnel path is invalid.')
-
-        if is_device_authorized(params):
-            if params and tunnel_path:
-                try:
-                    address = get_inspection_address(params)
-                    http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, Status(),
-                                                             __version__,
-                                                             address, logger)
-                    http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
-                    http_inspection_thread.daemon = True
-                except OSError as e:
-                    logger.exception(
-                        f"Couldn't start inspection HTTP server. Address {address[0]}:{address[1]} already in use. "
-                        f"Exception: {e}")
-
-            test_everything(files, logger, processes, introspection_thread=http_inspection_thread)
         else:
-            logger.error("Can't start connector, this device is not authorized to run it.")
-
+            try:
+                address = get_inspection_address(params)
+                http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, Status(),
+                                                         __version__,
+                                                         address, logger)
+                http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
+                http_inspection_thread.daemon = True
+            except OSError as e:
+                logger.exception(
+                    f"Couldn't start inspection HTTP server. Address {address[0]}:{address[1]} already in use. "
+                    f"Exception: {e}")
+        test_everything(files, logger, processes, introspection_thread=http_inspection_thread)
         logger.info("Press Enter to continue...")
         input()
         sys.exit(0)
