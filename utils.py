@@ -13,10 +13,7 @@ def get_application_path():
 
 
 def get_bundle_path():
-    if getattr(sys, 'frozen', False):   # check if the application is running as a bundle
-        return getattr(sys, '_MEIPASS')
-    else:
-        return os.path.dirname(os.path.abspath(__file__))
+    return getattr(sys, '_MEIPASS', os.path.abspath("."))
 
 
 def get_net_if_mac_addresses():
