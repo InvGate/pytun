@@ -15,15 +15,20 @@ _MAC_ADDRESS_PUB_KEY_PATH = "mac_address_pub_key"
 def is_device_authorized(params: dict) -> bool:
     """
     Validates that the device the connector is running on is "authorized".
-    A device is considered authorized if it does not have the mac_address key in the params dict or
-    if it has a network interface with a MAC address that matches the MAC address specified in the params dict
-    with a valid signature.
+
+    A device is considered authorized if it has a network interface with a MAC address that matches
+    the MAC address specified in the params dict with a valid signature.
+    For now, to not break running connectors without the config key used to validate the MAC address, a device is
+    also considered authorized if it does not have the MAC address key in the params dict
+
     This is meant to prevent users from running the connector in devices where it is not supposed to. It is not meant to
     prevent "malicious" users from doing it as MAC cloning is possible, making this validation useless.
 
     :param params: Connector config object
     :return: Is device authorized
     """
+
+    # TO BE REMOVED: Authorize connectors without the MAC address config key to not break running connectors without it
     if not params.get(_MAC_ADDRESS_CFG_KEY):
         return True
 
