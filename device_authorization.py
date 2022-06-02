@@ -2,25 +2,14 @@ import base64
 import json
 import os
 
-import psutil
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.backends import default_backend
 
-from utils import get_application_path
+from utils import get_net_if_mac_addresses, get_bundle_path
 
 _MAC_ADDRESS_CFG_KEY = "signature"
 _MAC_ADDRESS_PUB_KEY_PATH = "mac_address_pub_key"
-
-
-def get_net_if_mac_addresses():
-    """
-    :return: All the network interfaces MAC addresses
-    """
-    for interface, snics in psutil.net_if_addrs().items():
-        for snic in snics:
-            if snic.family == psutil.AF_LINK:
-                yield interface, snic.address.lower()
 
 
 def is_device_authorized(params: dict) -> bool:
@@ -47,7 +36,7 @@ def is_device_authorized(params: dict) -> bool:
         if all(mac_addr != net_if_mac[1] for net_if_mac in get_net_if_mac_addresses()):
             return False
 
-        with open(os.path.join(get_application_path(), _MAC_ADDRESS_PUB_KEY_PATH), "rb") as pub_key_file:
+        with open(os.path.join(get_bundle_path(), _MAC_ADDRESS_PUB_KEY_PATH), "rb") as pub_key_file:
             pubkey = serialization.load_pem_public_key(pub_key_file.read(), backend=default_backend())
 
         pubkey.verify(
