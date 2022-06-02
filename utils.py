@@ -23,4 +23,4 @@ def get_net_if_mac_addresses():
     for interface, snics in psutil.net_if_addrs().items():
         for snic in snics:
             if snic.family == psutil.AF_LINK:
-                yield interface, snic.address.lower()
+                yield interface, snic.address.lower().replace('-', ':')
