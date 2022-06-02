@@ -24,7 +24,6 @@ def is_device_authorized(params: dict) -> bool:
     :param params: Connector config object
     :return: Is device authorized
     """
-    print(f"{get_bundle_path()=}\n{list(get_net_if_mac_addresses())=}\n{os.path.join(get_bundle_path(), _MAC_ADDRESS_PUB_KEY_PATH)=}")
     if not params.get(_MAC_ADDRESS_CFG_KEY):
         return True
 
@@ -32,17 +31,13 @@ def is_device_authorized(params: dict) -> bool:
         mac_addr_json = json.loads(base64.b64decode(params.get(_MAC_ADDRESS_CFG_KEY)))
         mac_addr = mac_addr_json["payload"]
         mac_addr_sig = base64.b64decode(mac_addr_json["sig"])
-        print(f"{mac_addr=}")
-        print(f"{mac_addr_sig=}")
 
         # check that device has a network interface with a MAC address that matches the one from the config
         if all(mac_addr != net_if_mac[1] for net_if_mac in get_net_if_mac_addresses()):
             return False
 
         with open(os.path.join(get_bundle_path(), _MAC_ADDRESS_PUB_KEY_PATH), "rb") as pub_key_file:
-            key = pub_key_file.read()
-            print(f"{key=}")
-            pubkey = serialization.load_pem_public_key(key, backend=default_backend())
+            pubkey = serialization.load_pem_public_key(pub_key_file.read(), backend=default_backend())
 
         pubkey.verify(
             mac_addr_sig,
@@ -53,8 +48,7 @@ def is_device_authorized(params: dict) -> bool:
             ),
             hashes.SHA256()
         )
-    except Exception as err:
-        print(f"{err=}")
+    except Exception:
         return False
 
     return True
