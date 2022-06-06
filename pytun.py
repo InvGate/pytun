@@ -134,7 +134,8 @@ def main():
         else:
             try:
                 address = get_inspection_address(params)
-                http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, Status(mac_address=device.mac_address),
+                http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path,
+                                                         Status(mac_address=device.mac_address),
                                                          __version__,
                                                          address, logger)
                 http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
