@@ -1,5 +1,6 @@
 import argparse
 import configparser
+import logging
 import os
 import signal
 import socket
@@ -7,6 +8,7 @@ import sys
 import threading
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
+from json import JSONDecodeError
 from multiprocessing import freeze_support
 from os import listdir
 from os.path import isabs, dirname, realpath
@@ -19,7 +21,7 @@ from alerts.email_alert import EmailAlertSender
 from alerts.http_post_alert import HTTPPostAlertSender
 from alerts.pooled_alerter import DifferentThreadAlert
 from configure_logger import LogManager
-from observation.connection_check import ConnectionCheck
+from device import Device
 from observation.http_server import inspection_http_server
 from observation.status import Status
 from tunnel_infra.TunnelProcess import TunnelProcess
@@ -30,6 +32,7 @@ from version import __version__
 freeze_support()
 
 INI_FILENAME = 'connector.ini'
+_MAC_ADDRESS_CFG_KEY = "signature"
 
 
 def main():
@@ -82,6 +85,15 @@ def main():
     LogManager.path = log_path
     TunnelProcess.default_log_path = log_path
     logger = LogManager.configure_logger('main_connector.log', params.get("log_level", "INFO"), test_something)
+    device = Device(mac_address_signature=params.get(_MAC_ADDRESS_CFG_KEY))
+
+    if (test_something or args.test_all) and not device.is_authorized():
+        coloredlogs.install(level='DEBUG', logger=logger)
+        logger.critical("Can't start connector, this device is not authorized to run it.")
+        logger.info("Press Enter to continue...")
+        input()
+        sys.exit(1)
+
     if tunnel_manager_id is None:
         logger.error("tunnel_manager_id not set in the config file")
         sys.exit(1)
@@ -122,7 +134,8 @@ def main():
         else:
             try:
                 address = get_inspection_address(params)
-                http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path, Status(),
+                http_inspection = inspection_http_server(tunnel_path, tunnel_manager_id, LogManager.path,
+                                                         Status(mac_address=device.mac_address),
                                                          __version__,
                                                          address, logger)
                 http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
@@ -141,7 +154,13 @@ def main():
     pool = ThreadPoolExecutor(1)
     main_sender = DifferentThreadAlert(alerters=senders, logger=logger, process_pool=pool)
 
-    status = Status()
+    if not device.is_authorized():
+        msg = "Connector down! The device where it is installed is not allowed to run it."
+        logger.critical(msg)
+        main_sender.send_alert(tunnel_name=None, message=msg)
+        sys.exit(1)
+
+    status = Status(mac_address=device.mac_address)
 
     start_tunnels(files, logger, processes, senders, status)
 
