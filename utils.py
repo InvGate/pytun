@@ -40,7 +40,7 @@ def clean_runtime_tempdir():
     current_mei_folder_path = os.path.abspath(get_bundle_path())
     print(f"{current_mei_folder_path=}")
 
-    for mei_folder_path in [f.name for f in os.scandir(temps_dir) if f.is_dir()]:
+    for mei_folder_path in [f.path for f in os.scandir(temps_dir) if f.is_dir()]:
         print(f"{mei_folder_path=}")
 
         if mei_folder_path == current_mei_folder_path:
