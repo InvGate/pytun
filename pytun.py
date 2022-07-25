@@ -26,7 +26,7 @@ from observation.http_server import inspection_http_server
 from observation.status import Status
 from tunnel_infra.TunnelProcess import TunnelProcess
 from tunnel_infra.pathtype import PathType
-from utils import get_application_path
+from utils import get_application_path, clean_runtime_tempdir
 from version import __version__
 
 freeze_support()
@@ -37,6 +37,7 @@ _MAC_ADDRESS_CFG_KEY = "signature"
 
 def main():
     application_path = get_application_path()
+    clean_runtime_tempdir()
     parser = argparse.ArgumentParser(description='Tunnel')
     parser.add_argument("--config_ini", dest="config_ini", help="Configuration file to use", default=INI_FILENAME,
                         type=PathType(dash_ok=False))
