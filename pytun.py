@@ -26,7 +26,7 @@ from observation.http_server import inspection_http_server
 from observation.status import Status
 from tunnel_infra.TunnelProcess import TunnelProcess
 from tunnel_infra.pathtype import PathType
-from utils import get_application_path
+from utils import get_application_path, clean_runtime_tempdir
 from version import __version__
 
 freeze_support()
@@ -86,6 +86,8 @@ def main():
     TunnelProcess.default_log_path = log_path
     logger = LogManager.configure_logger('main_connector.log', params.get("log_level", "INFO"), test_something)
     device = Device(mac_address_signature=params.get(_MAC_ADDRESS_CFG_KEY))
+
+    clean_runtime_tempdir(logger=logger)
 
     if (test_something or args.test_all) and not device.is_authorized():
         coloredlogs.install(level='DEBUG', logger=logger)
