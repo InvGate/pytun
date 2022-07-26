@@ -36,8 +36,8 @@ _MAC_ADDRESS_CFG_KEY = "signature"
 
 
 def main():
-    application_path = get_application_path()
     clean_runtime_tempdir()
+    application_path = get_application_path()
     parser = argparse.ArgumentParser(description='Tunnel')
     parser.add_argument("--config_ini", dest="config_ini", help="Configuration file to use", default=INI_FILENAME,
                         type=PathType(dash_ok=False))
