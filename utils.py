@@ -54,7 +54,7 @@ def clean_runtime_tempdir(time_threshold: int = 15*60) -> None:
     current_mei_folder_path = os.path.abspath(get_bundle_path())
 
     # directory that contains the _MEI folders
-    temps_dir = os.path.join(current_mei_folder_path, '..')
+    temps_dir = os.path.abspath(os.path.join(current_mei_folder_path, '..'))
 
     now = time.time()
     for mei_folder_path in [f.path for f in os.scandir(temps_dir) if f.is_dir()]:
