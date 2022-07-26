@@ -36,7 +36,6 @@ _MAC_ADDRESS_CFG_KEY = "signature"
 
 
 def main():
-    clean_runtime_tempdir()
     application_path = get_application_path()
     parser = argparse.ArgumentParser(description='Tunnel')
     parser.add_argument("--config_ini", dest="config_ini", help="Configuration file to use", default=INI_FILENAME,
@@ -87,6 +86,8 @@ def main():
     TunnelProcess.default_log_path = log_path
     logger = LogManager.configure_logger('main_connector.log', params.get("log_level", "INFO"), test_something)
     device = Device(mac_address_signature=params.get(_MAC_ADDRESS_CFG_KEY))
+
+    clean_runtime_tempdir(logger=logger)
 
     if (test_something or args.test_all) and not device.is_authorized():
         coloredlogs.install(level='DEBUG', logger=logger)
