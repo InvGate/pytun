@@ -76,7 +76,7 @@ def clean_runtime_tempdir(logger: Logger, time_threshold: int = 15*60) -> None:
             try:
                 shutil.rmtree(mei_folder_path)
             except Exception:
-                logger.exception(f"Couldn't delete {mei_folder_path}")
+                logger.warning(f"Couldn't delete {mei_folder_path}", exc_info=True)
 
 
 
