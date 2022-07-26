@@ -57,14 +57,17 @@ def clean_runtime_tempdir(time_threshold: int = 15*60) -> None:
     temps_dir = os.path.abspath(os.path.join(current_mei_folder_path, '..'))
 
     now = time.time()
-    for mei_folder_path in [f.path for f in os.scandir(temps_dir) if f.is_dir()]:
-        if (
-                mei_folder_path == current_mei_folder_path or
-                (os.path.isdir(mei_folder_path) and (now-os.path.getctime(mei_folder_path)) <= time_threshold)
-        ):
-            continue
 
-        shutil.rmtree(mei_folder_path, ignore_errors=True)
+    for dir_entry in os.scandir(temps_dir):
+        if dir_entry.is_dir():
+            mei_folder_path = dir_entry.path
+            if (
+                    mei_folder_path == current_mei_folder_path or
+                    (now-os.path.getctime(mei_folder_path)) <= time_threshold
+            ):
+                continue
+
+            shutil.rmtree(mei_folder_path, ignore_errors=True)
 
 
 
