@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+from logging import Logger
 from typing import Optional
 
 from cryptography.hazmat.primitives import serialization, hashes
@@ -13,9 +14,10 @@ _MAC_ADDRESS_PUB_KEY_PATH = "mac_address_pub_key"
 
 
 class Device:
-    def __init__(self, mac_address_signature: str):
+    def __init__(self, mac_address_signature: str, logger: Logger):
         self._mac_address_signature = mac_address_signature
         self._authorized_mac_address: Optional[str] = self._get_authorized_mac_address()
+        self._logger = logger
 
     @property
     def mac_address(self):
@@ -28,7 +30,15 @@ class Device:
             mac_addr_sig = base64.b64decode(mac_addr_json["sig"])
 
             # check that device has a network interface with a MAC address that matches the one from the config
-            if all(mac_addr != net_if_mac[1] for net_if_mac in get_net_if_mac_addresses()):
+            mac_addr_found = False
+            for net_if_mac in get_net_if_mac_addresses():
+                self._logger.debug(f"Checking MAC address {net_if_mac}")
+                if mac_addr == net_if_mac[1]:
+                    self._logger.debug(f"MAC address found {net_if_mac}")
+                    mac_addr_found = True
+                    break
+            if not mac_addr_found:
+                self._logger.debug(f"MAC address {mac_addr} not found")
                 return None
 
             if not is_mac_address_signature_valid(mac_address_signature=mac_addr_sig, mac_address=mac_addr):

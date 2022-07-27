@@ -85,7 +85,7 @@ def main():
     LogManager.path = log_path
     TunnelProcess.default_log_path = log_path
     logger = LogManager.configure_logger('main_connector.log', params.get("log_level", "INFO"), test_something)
-    device = Device(mac_address_signature=params.get(_MAC_ADDRESS_CFG_KEY))
+    device = Device(mac_address_signature=params.get(_MAC_ADDRESS_CFG_KEY), logger=logger)
 
     clean_runtime_tempdir(logger=logger)
 
