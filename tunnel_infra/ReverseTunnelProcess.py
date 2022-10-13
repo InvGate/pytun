@@ -115,6 +115,8 @@ class ReverseTunnelProcess(multiprocessing.Process):
         finally:
             if self.tunnel:
                 self.tunnel.stop()
+            if client:
+                client.close()
 
     def ssh_connect(self, exit_on_failure=True):
         client = None
