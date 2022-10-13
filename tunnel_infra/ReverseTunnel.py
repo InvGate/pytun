@@ -1,35 +1,69 @@
+import contextlib
+import logging
 import select
 import socket
 import threading
 
-from paramiko import SSHException
+import paramiko
+from paramiko.client import SSHClient
+
+from alerts.alert_sender import AlertSender
 
 
-class Tunnel(object):
+class ReverseTunnel:
+    def __init__(
+        self,
+        name: str,
+        *,
+        receiver_host: str,
+        receiver_port: int,
+        client: SSHClient,
+        port_to_forward: int,
+        logger: logging.Logger,
+        keep_alive_time: int = 30,
+        alert_senders: list[AlertSender] | None = None
+    ):
+        """
+        Create a SSH reverse tunnel by asking the ``client`` to forward the data that it receives in the
+        ``port_to_forward`` port to the receiver
 
-    def __init__(self, name, server_port, remote_host, remote_port, client, logger, keep_alive_time=30,
-                 alert_senders=None):
+        :param name: Name of the tunnel
+        :param receiver_host: Host that's going to receive the data forwarded by the client
+        :param receiver_port: Port that's going to receive the data forwarded by the client
+        :param client: Client to forward data from
+        :param port_to_forward: Port from where the client forwards the data
+        """
         self.name = name
-        self.timer = None
-        self.server_port = server_port
-        self.remote_host = remote_host
-        self.remote_port = remote_port
+        self.receiver_host = receiver_host
+        self.receiver_port = receiver_port
         self.client = client
-        self.transport = None
+        self.port_to_forward = port_to_forward
         self.logger = logger
         self.keep_alive_time = keep_alive_time
         self.alert_senders = alert_senders
+
+        self.transport: paramiko.transport.Transport | None = None
+        self.timer: threading.Timer | None = None
         self.failed = False
 
     def handler(self, chan, host, port):
+        """
+        Forward data received through the channel to host:port using a socket and forward data received through the
+        socket to the channel.
+        """
         with socket.socket() as sock:
             try:
                 sock.settimeout(2)
                 sock.connect((host, port))
             except Exception as e:
-                self.logger.exception("Forwarding request to %s:%d failed: %r" % (host, port, e))
+                self.logger.exception(
+                    "Forwarding request to %s:%d failed: %r" % (host, port, e)
+                )
                 if self.alert_senders:
-                    message = "Failed to Establish connection to %s:%d with error: %r" % (host, port, e)
+                    message = (
+                        "Failed to Establish connection to %s:%d with error: %r"
+                        % (host, port, e)
+                    )
                     for each in self.alert_senders:
                         try:
                             each.send_alert(self.name, message=message)
@@ -38,8 +72,10 @@ class Tunnel(object):
                 return
 
             self.logger.debug(
-                "Connected!  Connector open %r -> %r -> %r"
-                , chan.origin_addr, chan.getpeername(), (host, port)
+                "Connected!  Connector open %r -> %r -> %r",
+                chan.origin_addr,
+                chan.getpeername(),
+                (host, port),
             )
             try:
                 while True:
@@ -62,6 +98,7 @@ class Tunnel(object):
                 self.logger.exception(e)
 
     def validate_tunnel_up(self):
+        # we use multiple methods as some methods for checking if the connection is active return false positives
         self.logger.debug("Going to check if connector is up")
         try:
             self.transport.send_ignore()
@@ -69,6 +106,7 @@ class Tunnel(object):
             self.logger.exception("Connector down! %s", e)
             self.failed = True
             return
+
         if not self.transport.is_active():
             self.logger.exception("Connector down! Transport is not active")
             self.failed = True
@@ -77,7 +115,10 @@ class Tunnel(object):
             chn = self.transport.open_session(timeout=30)
             chn.close()
         except Exception as e:
-            self.logger.exception("Connector down! Failed to start a check session %s with timeout 30 seconds", e)
+            self.logger.exception(
+                "Connector down! Failed to start a check session %s with timeout 30 seconds",
+                e,
+            )
             self.failed = True
             return
         self.timer = threading.Timer(self.keep_alive_time, self.validate_tunnel_up)
@@ -85,8 +126,12 @@ class Tunnel(object):
 
     def reverse_forward_tunnel(self):
         try:
+            # get a connection to the client
             self.transport = self.client.get_transport()
-            self.transport.request_port_forward("", self.server_port)
+
+            # ask client to forward the data that it receives in the `remote_port_to_forward` through this SSH session
+            self.transport.request_port_forward("", self.port_to_forward)
+
             self.timer = threading.Timer(30, self.validate_tunnel_up)
             self.timer.start()
             while True:
@@ -96,9 +141,10 @@ class Tunnel(object):
                 if chan is None:
                     continue
                 thr = threading.Thread(
-                    target=self.handler, args=(chan, self.remote_host, self.remote_port)
+                    target=self.handler,
+                    args=(chan, self.receiver_host, self.receiver_port),
+                    daemon=True,
                 )
-                thr.setDaemon(True)
                 thr.start()
         except Exception as e:
             self.logger.exception("Failed to forward")
@@ -109,11 +155,9 @@ class Tunnel(object):
             self.timer = None
 
         if self.transport:
-            try:
-                self.transport.cancel_port_forward("", self.server_port)
+            with contextlib.suppress(Exception):
+                self.transport.cancel_port_forward("", self.port_to_forward)
                 self.transport = None
-            except Exception:
-                pass
 
     def __del__(self):
         self.stop()
