@@ -117,6 +117,7 @@ class ReverseTunnelProcess(multiprocessing.Process):
                 self.tunnel.stop()
 
     def ssh_connect(self, exit_on_failure=True):
+        client = None
         try:
             client = paramiko.SSHClient()
             if self.server_key:
@@ -136,6 +137,10 @@ class ReverseTunnelProcess(multiprocessing.Process):
             )
         except Exception as e:
             self.logger.info("Failed to connect to %s:%d: %r" % (self.server_host, self.server_port, e))
+
+            if client:
+                client.close()
+
             if exit_on_failure:
                 sys.exit(1)
             else:
