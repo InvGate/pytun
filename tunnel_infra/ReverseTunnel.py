@@ -157,6 +157,7 @@ class ReverseTunnel:
         if self.transport:
             with contextlib.suppress(Exception):
                 self.transport.cancel_port_forward("", self.port_to_forward)
+                self.transport.close()
                 self.transport = None
 
     def __del__(self):
