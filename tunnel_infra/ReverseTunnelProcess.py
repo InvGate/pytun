@@ -33,8 +33,8 @@ class ReverseTunnelProcess(multiprocessing.Process):
             server_key: str,
             user_to_login: str,
             key_file: str,
-            receiver_host: str,
-            receiver_port: int,
+            recipient_host: str,
+            recipient_port: int,
             keep_alive_time: int,
             log_level: str | int,
             log_to_console: bool,
@@ -48,13 +48,13 @@ class ReverseTunnelProcess(multiprocessing.Process):
         :param server_host: Host of server that will forward the data
         :param server_port: Port of the server that will forward the data
         :param server_port_to_forward: Port of the server to forward data from. Whatever data the server receives in
-            this port will be forwarded to the receiver_host:receiver_port
+            this port will be forwarded to the recipient_host:recipient_port
         :param server_key: Path to the public key of the external server to connect to,
             also called ssh server fingerprint or known host key
         :param user_to_login: Username used to connect to the server
         :param key_file: Path to the private key of the client, also called "host key"
-        :param receiver_host: Host that's going to receive the data forwarded by the server
-        :param receiver_port: Port that's going to receive the data forwarded by the server
+        :param recipient_host: Host that's going to receive the data forwarded by the server
+        :param recipient_port: Port that's going to receive the data forwarded by the server
         :param keep_alive_time: Time in seconds to check that the tunnel is working
         """
         self.tunnel_name = tunnel_name
@@ -64,8 +64,8 @@ class ReverseTunnelProcess(multiprocessing.Process):
         self.server_key = server_key
         self.user_to_login = user_to_login
         self.key_file = key_file
-        self.receiver_host = receiver_host
-        self.receiver_port = receiver_port
+        self.recipient_host = recipient_host
+        self.recipient_port = recipient_port
         self.keep_alive_time = keep_alive_time
         self.alert_senders = alert_senders
 
@@ -106,14 +106,14 @@ class ReverseTunnelProcess(multiprocessing.Process):
         client = self.ssh_connect()
         self.logger.info(
             "Now forwarding remote port %d to %s:%d ..."
-            % (self.server_port_to_forward, self.receiver_host, self.receiver_port)
+            % (self.server_port_to_forward, self.recipient_host, self.recipient_port)
         )
         try:
             tunnel = ReverseTunnel(
                 self.tunnel_name,
                 port_to_forward=self.server_port_to_forward,
-                receiver_host=self.receiver_host,
-                receiver_port=self.receiver_port,
+                recipient_host=self.recipient_host,
+                recipient_port=self.recipient_port,
                 client=client,
                 logger=self.logger,
                 keep_alive_time=self.keep_alive_time,
@@ -190,8 +190,8 @@ class ReverseTunnelProcess(multiprocessing.Process):
             server_key=server_key,
             user_to_login=defaults["username"],
             key_file=key_file,
-            receiver_host=defaults['remote_host'],
-            receiver_port=int(defaults.get('remote_port', SSH_PORT)),
+            recipient_host=defaults['remote_host'],
+            recipient_port=int(defaults.get('remote_port', SSH_PORT)),
             keep_alive_time=int(defaults.get("keep_alive_time", DEFAULT_KEEP_ALIVE_TIME)),
             alert_senders=alert_senders,
             log_filename=f"{os.path.splitext(os.path.basename(ini_file))[0]}.log",

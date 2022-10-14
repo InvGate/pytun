@@ -277,7 +277,7 @@ def test_tunnels(files, logger, test_reverse_forward=True):
                     message = """Failed to connect with service %s:%s. We received a Port binding rejected error. That means that we could not open our connector completely.
                                             Please check server_host, server_port and port in your config.
                                             Error %r"""
-                    logger.exception(message % (tunnel_process.receiver_host, tunnel_process.receiver_port, e))
+                    logger.exception(message % (tunnel_process.recipient_host, tunnel_process.recipient_port, e))
                     failed = True
                     continue
             client.close()
@@ -289,20 +289,20 @@ def test_tunnels(files, logger, test_reverse_forward=True):
             the key that we got was %s
             Please check server_key in your config.
             Detailed Error %r"""
-            logger.exception(message % (tunnel_process.receiver_host, tunnel_process.receiver_port, e.hostname,
+            logger.exception(message % (tunnel_process.recipient_host, tunnel_process.recipient_port, e.hostname,
                                         e.expected_key.get_base64(), e.key.get_base64(), e))
             failed = True
         except AuthenticationException as e:
             message = """Failed to connect with service %s:%s. The private key file was rejected. 
                                     Please check keyfile in your config
                                     Error %r"""
-            logger.exception(message % (tunnel_process.receiver_host, tunnel_process.receiver_port, e))
+            logger.exception(message % (tunnel_process.recipient_host, tunnel_process.recipient_port, e))
             failed = True
         except PasswordRequiredException as e:
             message = """Failed to connect with service %s:%s. The private key file is encrypted. 
                         Please check keyfile and username in your config
                         Error %r"""
-            logger.exception(message % (tunnel_process.receiver_host, tunnel_process.receiver_port, e))
+            logger.exception(message % (tunnel_process.recipient_host, tunnel_process.recipient_port, e))
             failed = True
 
         except Exception as e:
@@ -343,12 +343,12 @@ def test_connections(files, logger, processes):
         with socket.socket() as sock:
             try:
                 sock.settimeout(2)
-                sock.connect((tunnel_proc.receiver_host, tunnel_proc.receiver_port))
-                logger.info("Connection to %s:%s was successful", tunnel_proc.receiver_host, tunnel_proc.receiver_port)
+                sock.connect((tunnel_proc.recipient_host, tunnel_proc.recipient_port))
+                logger.info("Connection to %s:%s was successful", tunnel_proc.recipient_host, tunnel_proc.recipient_port)
             except Exception as e:
                 logger.exception(
                     "Failed to connect with service %s:%s. Please check that you have internet access, that there is not a firewall blocking the connection or that remote_host and remote_port in your config are correct. Error %r" %
-                    (tunnel_proc.receiver_host, tunnel_proc.receiver_port, e))
+                    (tunnel_proc.recipient_host, tunnel_proc.recipient_port, e))
                 failed = True
     return failed
 

@@ -15,8 +15,8 @@ class ReverseTunnel:
         self,
         name: str,
         *,
-        receiver_host: str,
-        receiver_port: int,
+        recipient_host: str,
+        recipient_port: int,
         client: SSHClient,
         port_to_forward: int,
         logger: logging.Logger,
@@ -25,17 +25,17 @@ class ReverseTunnel:
     ):
         """
         Create a SSH reverse tunnel by asking the ``client`` to forward the data that it receives in the
-        ``port_to_forward`` port to the receiver
+        ``port_to_forward`` port to the recipient
 
         :param name: Name of the tunnel
-        :param receiver_host: Host that's going to receive the data forwarded by the client
-        :param receiver_port: Port that's going to receive the data forwarded by the client
+        :param recipient_host: Host that's going to receive the data forwarded by the client
+        :param recipient_port: Port that's going to receive the data forwarded by the client
         :param client: Client to forward data from
         :param port_to_forward: Port from where the client forwards the data
         """
         self.name = name
-        self.receiver_host = receiver_host
-        self.receiver_port = receiver_port
+        self.recipient_host = recipient_host
+        self.recipient_port = recipient_port
         self.client = client
         self.port_to_forward = port_to_forward
         self.logger = logger
@@ -142,7 +142,7 @@ class ReverseTunnel:
                     continue
                 thr = threading.Thread(
                     target=self.handler,
-                    args=(chan, self.receiver_host, self.receiver_port),
+                    args=(chan, self.recipient_host, self.recipient_port),
                     daemon=True,
                 )
                 thr.start()
