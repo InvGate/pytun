@@ -129,7 +129,7 @@ class ReverseTunnel:
             # get a connection to the client
             self.transport = self.client.get_transport()
 
-            # ask client to forward the data that it receives in the `remote_port_to_forward` through this SSH session
+            # ask client to forward the data that it receives in the `port_to_forward` through this SSH session
             self.transport.request_port_forward("", self.port_to_forward)
 
             self.timer = threading.Timer(30, self.validate_tunnel_up)
