@@ -36,8 +36,11 @@ class ReverseTunnelProcess(multiprocessing.Process):
             receiver_host: str,
             receiver_port: int,
             keep_alive_time: int,
-            get_logger: Callable[[], Logger],
-            alert_senders: list[AlertSender] = None,
+            log_level: str | int,
+            log_to_console: bool,
+            log_filename: str = None,
+            log_path: str = None,
+            alert_senders: list[AlertSender] = None
     ) -> None:
         """
 
@@ -53,7 +56,6 @@ class ReverseTunnelProcess(multiprocessing.Process):
         :param receiver_host: Host that's going to receive the data forwarded by the server
         :param receiver_port: Port that's going to receive the data forwarded by the server
         :param keep_alive_time: Time in seconds to check that the tunnel is working
-        :param get_logger: Callable that returns a logger to be used by this TunnelProcess
         """
         self.tunnel_name = tunnel_name
         self.server_host = server_host
@@ -66,15 +68,29 @@ class ReverseTunnelProcess(multiprocessing.Process):
         self.receiver_port = receiver_port
         self.keep_alive_time = keep_alive_time
         self.alert_senders = alert_senders
-        self._get_logger = get_logger
+
+        self.log_level = log_level
+        self.log_to_console = log_to_console
+        self.log_path = log_path or ReverseTunnelProcess.default_log_path
+        self.log_filename = (
+            log_filename
+            if log_filename is not None
+            else f"{os.path.splitext(os.path.basename(tunnel_name))[0]}.log"
+        )
 
         self.tunnel: ReverseTunnel | None = None
 
         super().__init__()
 
     @cached_property
-    def logger(self):
-        return self._get_logger()
+    def logger(self) -> Logger:
+        return LogManager.configure_logger(
+            self.log_filename,
+            self.log_level,
+            self.log_to_console,
+            name="pyconn-connector",
+            path=self.log_path
+        )
 
     def exit_gracefully(self, *args):
         self.logger.info("Exit gracefully called for %s", self.pid)
@@ -178,11 +194,9 @@ class ReverseTunnelProcess(multiprocessing.Process):
             receiver_port=int(defaults.get('remote_port', SSH_PORT)),
             keep_alive_time=int(defaults.get("keep_alive_time", DEFAULT_KEEP_ALIVE_TIME)),
             alert_senders=alert_senders,
-            get_logger=lambda: LogManager.configure_logger(
-                f"{os.path.splitext(os.path.basename(ini_file))[0]}.log",
-                defaults.get('log_level', 'DEBUG'),
-                bool(defaults.get('log_to_console', False)),
-                name="pyconn-connector",
-                path=ReverseTunnelProcess.default_log_path
-            )
+            log_filename=f"{os.path.splitext(os.path.basename(ini_file))[0]}.log",
+            log_level=defaults.get('log_level', 'DEBUG'),
+            log_to_console=bool(defaults.get('log_to_console', False)),
+            log_path=ReverseTunnelProcess.default_log_path
         )
+
