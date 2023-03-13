@@ -87,7 +87,7 @@ class TunnelProcess(multiprocessing.Process):
             self.log_filename,
             self.log_level,
             self.log_to_console,
-            name="pyconn-connector",
+            name="connector",
             path=self.log_path
         )
 
