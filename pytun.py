@@ -1,6 +1,9 @@
+from utils import is_app_running_as_pyinstaller_bundle
+if is_app_running_as_pyinstaller_bundle():
+    import warnings
+    warnings.filterwarnings("ignore")
 import argparse
 import configparser
-import logging
 import os
 import signal
 import socket
@@ -8,10 +11,9 @@ import sys
 import threading
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
-from json import JSONDecodeError
 from multiprocessing import freeze_support
 from os import listdir
-from os.path import isabs, dirname, realpath
+from os.path import isabs
 from os.path import isfile, join
 import coloredlogs
 from paramiko import BadHostKeyException, PasswordRequiredException, AuthenticationException, SSHException
