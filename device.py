@@ -44,6 +44,7 @@ class Device:
             if not is_mac_address_signature_valid(mac_address_signature=mac_addr_sig, mac_address=mac_addr):
                 return None
         except Exception:
+            self._logger.error("Couldn't validate MAC address", exc_info=True)
             return None
 
         return mac_addr
