@@ -26,7 +26,7 @@ from configure_logger import LogManager
 from device import Device
 from observation.http_server import inspection_http_server
 from observation.status import Status
-from tunnel_infra.TunnelProcess import TunnelProcess
+from tunnel_infra.ReverseTunnelProcess import ReverseTunnelProcess
 from tunnel_infra.pathtype import PathType
 from utils import get_application_path, clean_runtime_tempdir
 from version import __version__
@@ -85,7 +85,7 @@ def main():
         if not os.path.isdir(log_path):
             os.mkdir(log_path)
     LogManager.path = log_path
-    TunnelProcess.default_log_path = log_path
+    ReverseTunnelProcess.default_log_path = log_path
     logger = LogManager.configure_logger('main_connector.log', params.get("log_level", "INFO"), test_something)
     device = Device(mac_address_signature=params.get(_MAC_ADDRESS_CFG_KEY), logger=logger)
 
@@ -254,7 +254,7 @@ def test_tunnels(files, logger, test_reverse_forward=True):
             config_file = files[each]
             logger.info("Going to start connector from file %s", config_file)
             try:
-                tunnel_process = TunnelProcess.from_config_file(config_file, [])
+                tunnel_process = ReverseTunnelProcess.from_config_file(config_file, [])
             except Exception as e:
                 logger.exception(
                     "Failed to create connector from file %s. Configuration file may be incorrect. Error detail %s",
@@ -273,13 +273,13 @@ def test_tunnels(files, logger, test_reverse_forward=True):
                 continue
             if test_reverse_forward:
                 try:
-                    transport.request_port_forward("", tunnel_process.remote_port_to_forward)
+                    transport.request_port_forward("", tunnel_process.server_port_to_forward)
                     transport.close()
                 except SSHException as e:
                     message = """Failed to connect with service %s:%s. We received a Port binding rejected error. That means that we could not open our connector completely.
                                             Please check server_host, server_port and port in your config.
                                             Error %r"""
-                    logger.exception(message % (tunnel_process.remote_host, tunnel_process.remote_port, e))
+                    logger.exception(message % (tunnel_process.recipient_host, tunnel_process.recipient_port, e))
                     failed = True
                     continue
             client.close()
@@ -291,20 +291,20 @@ def test_tunnels(files, logger, test_reverse_forward=True):
             the key that we got was %s
             Please check server_key in your config.
             Detailed Error %r"""
-            logger.exception(message % (tunnel_process.remote_host, tunnel_process.remote_port, e.hostname,
+            logger.exception(message % (tunnel_process.recipient_host, tunnel_process.recipient_port, e.hostname,
                                         e.expected_key.get_base64(), e.key.get_base64(), e))
             failed = True
         except AuthenticationException as e:
             message = """Failed to connect with service %s:%s. The private key file was rejected. 
                                     Please check keyfile in your config
                                     Error %r"""
-            logger.exception(message % (tunnel_process.remote_host, tunnel_process.remote_port, e))
+            logger.exception(message % (tunnel_process.recipient_host, tunnel_process.recipient_port, e))
             failed = True
         except PasswordRequiredException as e:
             message = """Failed to connect with service %s:%s. The private key file is encrypted. 
                         Please check keyfile and username in your config
                         Error %r"""
-            logger.exception(message % (tunnel_process.remote_host, tunnel_process.remote_port, e))
+            logger.exception(message % (tunnel_process.recipient_host, tunnel_process.recipient_port, e))
             failed = True
 
         except Exception as e:
@@ -345,12 +345,12 @@ def test_connections(files, logger, processes):
         with socket.socket() as sock:
             try:
                 sock.settimeout(2)
-                sock.connect((tunnel_proc.remote_host, tunnel_proc.remote_port))
-                logger.info("Connection to %s:%s was successful", tunnel_proc.remote_host, tunnel_proc.remote_port)
+                sock.connect((tunnel_proc.recipient_host, tunnel_proc.recipient_port))
+                logger.info("Connection to %s:%s was successful", tunnel_proc.recipient_host, tunnel_proc.recipient_port)
             except Exception as e:
                 logger.exception(
                     "Failed to connect with service %s:%s. Please check that you have internet access, that there is not a firewall blocking the connection or that remote_host and remote_port in your config are correct. Error %r" %
-                    (tunnel_proc.remote_host, tunnel_proc.remote_port, e))
+                    (tunnel_proc.recipient_host, tunnel_proc.recipient_port, e))
                 failed = True
     return failed
 
@@ -401,7 +401,7 @@ def check_tunnels(files, items, logger, processes, to_restart, pool, pooled_send
 def restart_tunnels(files, logger, processes, to_restart, alert_senders, status):
     for each in to_restart:
         logger.info("Going to restart connector from file %s", files[each])
-        tunnel_process = TunnelProcess.from_config_file(files[each], alert_senders)
+        tunnel_process = ReverseTunnelProcess.from_config_file(files[each], alert_senders)
         processes[each] = tunnel_process
         tunnel_process.start()
         status.start_tunnel(files[each])
@@ -436,7 +436,7 @@ def create_tunnels_from_config(alert_senders, files, logger, processes):
         config_file = files[each]
         logger.info("Going to start connector from file %s", config_file)
         try:
-            tunnel_process = TunnelProcess.from_config_file(config_file, alert_senders)
+            tunnel_process = ReverseTunnelProcess.from_config_file(config_file, alert_senders)
         except Exception as e:
             logger.exception("Failed to create connector from file %s: %s", config_file, e)
             for pr in processes.values():
