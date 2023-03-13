@@ -5,12 +5,11 @@ import signal
 import sys
 from functools import cached_property
 from logging import Logger
-from typing import Callable
 
 import paramiko
 
 from alerts.alert_sender import AlertSender
-from .ReverseTunnel import ReverseTunnel
+from .Tunnel import Tunnel
 from configure_logger import LogManager
 from os.path import isabs, dirname, realpath, join
 
@@ -20,7 +19,7 @@ SSH_PORT = 22
 DEFAULT_PORT = 4000
 
 
-class ReverseTunnelProcess(multiprocessing.Process):
+class TunnelProcess(multiprocessing.Process):
     default_log_path = './logs'
 
     def __init__(
@@ -71,14 +70,14 @@ class ReverseTunnelProcess(multiprocessing.Process):
 
         self.log_level = log_level
         self.log_to_console = log_to_console
-        self.log_path = log_path or ReverseTunnelProcess.default_log_path
+        self.log_path = log_path or TunnelProcess.default_log_path
         self.log_filename = (
             log_filename
             if log_filename is not None
             else f"{os.path.splitext(os.path.basename(tunnel_name))[0]}.log"
         )
 
-        self.tunnel: ReverseTunnel | None = None
+        self.tunnel: Tunnel | None = None
 
         super().__init__()
 
@@ -109,7 +108,7 @@ class ReverseTunnelProcess(multiprocessing.Process):
             % (self.server_port_to_forward, self.recipient_host, self.recipient_port)
         )
         try:
-            tunnel = ReverseTunnel(
+            tunnel = Tunnel(
                 self.tunnel_name,
                 port_to_forward=self.server_port_to_forward,
                 recipient_host=self.recipient_host,
@@ -182,7 +181,7 @@ class ReverseTunnelProcess(multiprocessing.Process):
         if server_key is not None and not isabs(server_key):
             server_key = join(directory, server_key)
 
-        return ReverseTunnelProcess(
+        return TunnelProcess(
             tunnel_name=defaults.get('connector_name' if 'connector_name' in defaults else 'tunnel_name', realpath(ini_file)),
             server_host=defaults['server_host'],
             server_port=int(defaults.get('server_port', SSH_PORT)),
@@ -197,6 +196,6 @@ class ReverseTunnelProcess(multiprocessing.Process):
             log_filename=f"{os.path.splitext(os.path.basename(ini_file))[0]}.log",
             log_level=defaults.get('log_level', 'DEBUG'),
             log_to_console=bool(defaults.get('log_to_console', False)),
-            log_path=ReverseTunnelProcess.default_log_path
+            log_path=TunnelProcess.default_log_path
         )
 

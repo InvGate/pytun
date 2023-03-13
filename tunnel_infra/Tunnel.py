@@ -10,7 +10,7 @@ from paramiko.client import SSHClient
 from alerts.alert_sender import AlertSender
 
 
-class ReverseTunnel:
+class Tunnel:
     def __init__(
         self,
         name: str,
@@ -24,7 +24,7 @@ class ReverseTunnel:
         alert_senders: list[AlertSender] | None = None
     ):
         """
-        Create a SSH reverse tunnel by asking the ``client`` to forward the data that it receives in the
+        Create an SSH tunnel by asking the ``client`` to forward the data that it receives in the
         ``port_to_forward`` port to the recipient
 
         :param name: Name of the tunnel
