@@ -1,5 +1,5 @@
 from utils import is_app_running_as_pyinstaller_bundle
-if not is_app_running_as_pyinstaller_bundle():
+if is_app_running_as_pyinstaller_bundle():
     import warnings
     warnings.filterwarnings("ignore")
 import argparse
