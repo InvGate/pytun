@@ -26,7 +26,7 @@ from configure_logger import LogManager
 from device import Device
 from observation.http_server import inspection_http_server
 from observation.status import Status
-from tunnel_infra.ReverseTunnelProcess import ReverseTunnelProcess
+from tunnel_infra.TunnelProcess import TunnelProcess
 from tunnel_infra.pathtype import PathType
 from utils import get_application_path, clean_runtime_tempdir
 from version import __version__
@@ -85,7 +85,7 @@ def main():
         if not os.path.isdir(log_path):
             os.mkdir(log_path)
     LogManager.path = log_path
-    ReverseTunnelProcess.default_log_path = log_path
+    TunnelProcess.default_log_path = log_path
     logger = LogManager.configure_logger('main_connector.log', params.get("log_level", "INFO"), test_something)
     device = Device(mac_address_signature=params.get(_MAC_ADDRESS_CFG_KEY), logger=logger)
 
@@ -254,7 +254,7 @@ def test_tunnels(files, logger, test_reverse_forward=True):
             config_file = files[each]
             logger.info("Going to start connector from file %s", config_file)
             try:
-                tunnel_process = ReverseTunnelProcess.from_config_file(config_file, [])
+                tunnel_process = TunnelProcess.from_config_file(config_file, [])
             except Exception as e:
                 logger.exception(
                     "Failed to create connector from file %s. Configuration file may be incorrect. Error detail %s",
@@ -401,7 +401,7 @@ def check_tunnels(files, items, logger, processes, to_restart, pool, pooled_send
 def restart_tunnels(files, logger, processes, to_restart, alert_senders, status):
     for each in to_restart:
         logger.info("Going to restart connector from file %s", files[each])
-        tunnel_process = ReverseTunnelProcess.from_config_file(files[each], alert_senders)
+        tunnel_process = TunnelProcess.from_config_file(files[each], alert_senders)
         processes[each] = tunnel_process
         tunnel_process.start()
         status.start_tunnel(files[each])
@@ -436,7 +436,7 @@ def create_tunnels_from_config(alert_senders, files, logger, processes):
         config_file = files[each]
         logger.info("Going to start connector from file %s", config_file)
         try:
-            tunnel_process = ReverseTunnelProcess.from_config_file(config_file, alert_senders)
+            tunnel_process = TunnelProcess.from_config_file(config_file, alert_senders)
         except Exception as e:
             logger.exception("Failed to create connector from file %s: %s", config_file, e)
             for pr in processes.values():

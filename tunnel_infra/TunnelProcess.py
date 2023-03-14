@@ -9,9 +9,10 @@ from logging import Logger
 import paramiko
 
 from alerts.alert_sender import AlertSender
-from .Tunnel import Tunnel
 from configure_logger import LogManager
 from os.path import isabs, dirname, realpath, join
+
+from tunnel_infra.Tunnel import Tunnel
 
 DEFAULT_KEEP_ALIVE_TIME = 30
 
