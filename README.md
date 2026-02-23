@@ -1,6 +1,6 @@
 # pytun - SSH Reverse Tunnel Manager
 
-[![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
 **pytun** is a production-grade SSH reverse tunnel manager that allows on-premises services to be securely accessed from cloud instances without VPN. It provides automatic health monitoring, alerting, and self-healing capabilities.
 
