@@ -44,9 +44,8 @@ cd pytun
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Configure connector (see Configuration section)
-cp connector.ini.example connector.ini
-# Edit connector.ini with your settings
+# 3. Create connector.ini (see Configuration section)
+# Edit connector.ini with your settings (no example file - create from scratch)
 
 # 4. Create tunnel configuration
 mkdir -p configs
@@ -441,8 +440,10 @@ ls -la connector.ini
 
 ## 📚 Documentation
 
-- **[CLAUDE.md](CLAUDE.md)** - Comprehensive technical documentation for developers/AI assistants
-- **[Customer Docs](https://docs.google.com/document/d/1bhlSKnXat4NMa48K0-OH7UHLwC2aXXoiSRTljt6L7pY)** - End-user documentation
+- **[CLAUDE.md](CLAUDE.md)** - Technical documentation for developers/AI assistants (root overview)
+  - [tunnel_infra/CLAUDE.md](tunnel_infra/CLAUDE.md) - SSH tunnel infrastructure details
+  - [alerts/CLAUDE.md](alerts/CLAUDE.md) - Alert system details
+  - [observation/CLAUDE.md](observation/CLAUDE.md) - HTTP inspection server details
 
 ## 🔗 Related Projects
 
@@ -455,6 +456,7 @@ ls -la connector.ini
 
 ```
 coloredlogs==14.0              # Colored logging output
+cryptography                   # RSA-PSS device authorization (transitive via paramiko)
 deckar01-ratelimit==3.0.2      # Rate limiting for alerts
 email-validator==1.1.1         # Email address validation
 paramiko==3.4.0                # SSH protocol implementation
@@ -500,4 +502,4 @@ requests==2.32.4               # HTTP requests for alerts
 **Version**: 1.1.17
 **Maintainer**: InvGate - Internal Tools Team
 **Repository**: Private (Internal Use Only)
-**Last Updated**: 2025
+**Last Updated**: 2026
