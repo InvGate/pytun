@@ -174,6 +174,25 @@ sc start InvGateTunnel
 
 **PyInstaller key settings** (`pytun.spec`): `uac_admin=True`, bundles `mac_address_pub_key`, `runtime_tmpdir='./tmp'`
 
+### mac_address_pub_key — lifecycle and staging/production split
+
+The file `mac_address_pub_key` (RSA public key, PEM format) is bundled into the `.exe` at build time via `pytun.spec`:
+```python
+datas=[('mac_address_pub_key', '.')]
+```
+At runtime PyInstaller extracts it to `sys._MEIPASS` (`./tmp/_MEIxxx/`). In dev mode it is read from the current working directory (`get_bundle_path()` → `os.path.abspath(".")`).
+
+> **CRITICAL — staging and production use different keys**
+>
+> The staging build (`ci.invgate.com/job/pytun-build-staging/`) and the production build (`ci.invgate.com/job/pytun-build/`) each embed a **different** `mac_address_pub_key`. Connector configs are signed with the private key matching their environment:
+>
+> | Config source | Required .exe build |
+> |---|---|
+> | Staging backend | Staging `.exe` |
+> | Production backend | Production `.exe` |
+>
+> If you test a staging config with a production `.exe` (or vice versa), `is_mac_address_signature_valid()` will silently return `False` — the connector will appear unauthorized with no clear error in the logs, because all verification failures are swallowed by a bare `except` block (`device.py`, `is_mac_address_signature_valid`). **Always use the matching build when testing.**
+
 **Jenkins**: `ci.invgate.com/job/pytun-build/` (prod), `ci.invgate.com/job/pytun-build-staging/` (staging)
 
 **Release**: Update `version.py` → commit → Jenkins build → test installer → publish to `download.invgate.net`
