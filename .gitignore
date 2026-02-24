@@ -135,3 +135,5 @@ winconfig/
 v
 
 mac_address_pub_key
+
+.claude/*
