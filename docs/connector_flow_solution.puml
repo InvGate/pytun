@@ -1,0 +1,72 @@
+@startuml
+!theme plain
+left to right direction
+hide stereotype
+
+title <size:16><b>Solucion</b>: tunel SSH inverso con Connector (pytun)</size>
+
+skinparam defaultFontSize 13
+skinparam defaultFontName "Segoe UI"
+skinparam backgroundColor #ffffff
+skinparam shadowing false
+
+skinparam package<<onprem>> {
+  BorderColor #868e96
+  BorderThickness 2
+  BorderStyle dashed
+  BackgroundColor #f8f9fa
+  FontColor #343a40
+  FontStyle bold
+  FontSize 14
+}
+
+skinparam package<<cloud>> {
+  BorderColor #1971c2
+  BorderThickness 2
+  BackgroundColor #dbe9f7
+  FontColor #1864ab
+  FontStyle bold
+  FontSize 15
+}
+
+skinparam component {
+  BorderThickness 2
+  RoundCorner 10
+  FontSize 13
+}
+
+skinparam note {
+  BackgroundColor #fff3bf
+  BorderColor #e8a500
+  FontSize 11
+}
+
+package "Red del cliente (on-premises)" <<onprem>> {
+  component "Servicio local\n(LDAP / DB / SMTP)" as SL #a5d8ff
+  component "<b>Connector</b>\n(pytun)" as CN #b2f2bb
+}
+
+package "InvGate Cloud" <<cloud>> {
+  component "Servidor SSH" as SC #ffec99
+  component "Aplicacion\nInvGate" as AI #d0bfff
+}
+
+SL <-[#495057]- CN : (1) conexion local
+CN <-[#1971c2,bold]-> SC : <b>(2) Tunel SSH inverso</b>\nconexion saliente
+AI -[#495057]-> SC : (3) consulta
+SC -[#495057]-> AI : (4) respuesta
+
+note bottom of CN
+  El Connector inicia la conexion <b>hacia afuera</b>
+  El firewall permite trafico saliente
+end note
+
+legend right
+  <b>Flujo de conexion</b>
+  (1) Connector se conecta al servicio local a reenviar
+  (2) Connector abre el tunel SSH inverso hacia el servidor (saliente)
+  (3) InvGate envia una consulta a traves del tunel
+  (4) El servidor devuelve la respuesta por el mismo tunel
+endlegend
+
+@enduml

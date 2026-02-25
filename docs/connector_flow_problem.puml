@@ -1,0 +1,57 @@
+@startuml
+!theme plain
+left to right direction
+hide stereotype
+
+title <size:16><b>Problema</b>: acceso bloqueado a servicios locales</size>
+
+skinparam defaultFontSize 13
+skinparam defaultFontName "Segoe UI"
+skinparam backgroundColor #ffffff
+skinparam shadowing false
+
+skinparam package<<cloud>> {
+  BorderColor #1971c2
+  BorderThickness 2
+  BackgroundColor #dbe9f7
+  FontColor #1864ab
+  FontStyle bold
+  FontSize 15
+}
+
+skinparam package<<onprem>> {
+  BorderColor #868e96
+  BorderThickness 2
+  BorderStyle dashed
+  BackgroundColor #f8f9fa
+  FontColor #343a40
+  FontStyle bold
+  FontSize 14
+}
+
+skinparam rectangle {
+  BorderThickness 1
+  RoundCorner 10
+  FontSize 13
+}
+
+skinparam note {
+  BackgroundColor #fff3bf
+  BorderColor #e8a500
+  FontSize 12
+}
+
+package "InvGate Cloud" <<cloud>> {
+  rectangle "Servidor InvGate\nnecesita conectarse\na servicios locales" as S #5b9bd5
+}
+
+rectangle "<b>Firewall</b>\nBloquea conexiones\nentrantes" as FW #fff3bf
+
+package "Red del cliente (on-premises)" <<onprem>> {
+  rectangle "Servicios locales\n(LDAP / DB / SMTP)\nInaccesibles desde internet" as SL #dee2e6
+}
+
+S -[#c92a2a,bold]-> FW : <color:#c92a2a><b>Conexion directa bloqueada</b></color>
+FW -[#c92a2a,dashed]-> SL : <color:#c92a2a>No puede pasar</color>
+
+@enduml
