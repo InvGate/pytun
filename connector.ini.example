@@ -1,0 +1,34 @@
+[pytun]
+# Unique identifier for this connector instance (required)
+tunnel_manager_id = my-connector-001
+
+# Directory where tunnel .ini files are located
+tunnel_dirs = ./configs
+
+# Logging — level: DEBUG | INFO | WARNING
+log_level = INFO
+log_path = ./logs
+
+# HTTP inspection server
+# WARNING: keep inspection_localhost_only=True in production.
+# The /configs endpoint serves SSH keys as a ZIP file.
+inspection_port = 9999
+inspection_localhost_only = True
+
+# MAC address signature (provided by InvGate backend — do not edit manually)
+# signature = <base64-encoded signature>
+
+
+# --- Optional: SMTP email alerts ---
+# smtp_hostname = smtp.example.com
+# smtp_port     = 587
+# smtp_security = tls          # tls | ssl | none
+# smtp_login    = alerts@example.com
+# smtp_password = YOUR_SMTP_PASSWORD
+# smtp_to       = oncall@example.com
+
+
+# --- Optional: HTTP POST alerts ---
+# http_url      = https://alerts.example.com/webhook
+# http_user     = webhook_user
+# http_password = YOUR_HTTP_PASSWORD

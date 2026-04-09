@@ -1,0 +1,16 @@
+-----BEGIN PUBLIC KEY-----
+<RSA PUBLIC KEY IN PEM FORMAT>
+-----END PUBLIC KEY-----
+
+This file documents the expected format of `mac_address_pub_key`.
+
+The real key is NOT stored in this repository.
+Jenkins injects it at build time before PyInstaller bundles it into the .exe.
+
+For local development/tests: copy the key (staging or production)
+and place it as `mac_address_pub_key` in the project root.
+It is listed in .gitignore — will not be committed.
+
+NOTE: staging and production use DIFFERENT keys.
+Using a staging config with a production .exe (or vice versa) causes
+silent authorization failure in device.py with no clear error in logs.
