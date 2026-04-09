@@ -136,4 +136,6 @@ v
 
 mac_address_pub_key
 
+configs/*
+
 .claude/*
