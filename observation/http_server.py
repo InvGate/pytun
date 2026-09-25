@@ -7,6 +7,7 @@ from http import HTTPStatus
 from os.path import realpath
 
 from observation.connection_check import ConnectionCheck
+from utils import normalize_windows_path
 
 try:
     from http.server import ThreadingHTTPServer as HttpServer
@@ -29,8 +30,7 @@ class RequestHandlerClassFactory:
                 # ziph is zipfile handle
                 path = os.path.normpath(path)
                 # Hack: os.walk was not working if the path started with "\\?\"
-                if path.startswith("\\\\?\\"):
-                    path = path.replace("\\\\?\\", "")
+                path = normalize_windows_path(path)
                 logger.debug("going to walk " + path)
                 for root, dirs, files in os.walk(path):
                     for file in files:
@@ -105,9 +105,7 @@ class RequestHandlerClassFactory:
 
             def add_services_status(self):
                 res = {}
-                path = config_path
-                if path.startswith("\\\\?\\"):
-                    path = path.replace("\\\\?\\", "")
+                path = normalize_windows_path(config_path)
                 connection_checker = ConnectionCheck(logger)
                 pool = ThreadPoolExecutor(4)
                 jobs = {}

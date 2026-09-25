@@ -28,7 +28,7 @@ from observation.http_server import inspection_http_server
 from observation.status import Status
 from tunnel_infra.TunnelProcess import TunnelProcess
 from tunnel_infra.pathtype import PathType
-from utils import get_application_path, clean_runtime_tempdir
+from utils import get_application_path, clean_runtime_tempdir, normalize_windows_path
 from version import __version__
 
 freeze_support()
@@ -79,9 +79,7 @@ def main():
     log_path = params.get("log_path", './logs')
     if not isabs(log_path):
         log_path = join(application_path, log_path)
-        # Hack: sometimes when running on windows with pyinstaller and shawl a "\\?\" is added to cwd and it fails
-        if log_path.startswith("\\\\?\\"):
-            log_path = log_path.replace("\\\\?\\", "")
+        log_path = normalize_windows_path(log_path)
         if not os.path.isdir(log_path):
             os.mkdir(log_path)
     LogManager.path = log_path
@@ -115,9 +113,7 @@ def main():
 
     if not isabs(args.config_ini):
         tunnel_path = join(application_path, tunnel_path)
-        # Hack: sometimes when running on windows with pyinstaller and shawl a "\\?\" is added to cwd and it fails
-        if tunnel_path.startswith("\\\\?\\"):
-            tunnel_path = tunnel_path.replace("\\\\?\\", "")
+        tunnel_path = normalize_windows_path(tunnel_path)
     files = [join(tunnel_path, f) for f in listdir(tunnel_path) if isfile(join(tunnel_path, f)) and f[-4:] == '.ini']
     processes = {}
 
