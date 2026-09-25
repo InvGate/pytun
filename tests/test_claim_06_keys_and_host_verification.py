@@ -22,7 +22,9 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-REAL_CONFIGS = pathlib.Path("/home/alejandro-cantero/VMShared/configuracion_connector/configs")
+# Real customer configs are never committed; point this at a local copy.
+# os.devnull is never a directory, so the tests skip when the var is unset.
+REAL_CONFIGS = pathlib.Path(os.environ.get("PYTUN_REAL_CONFIGS") or os.devnull)
 
 requires_real_configs = pytest.mark.skipif(
     not REAL_CONFIGS.is_dir(),
