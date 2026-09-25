@@ -18,7 +18,6 @@ configuration, not in this repository, and cannot be verified from it.
 """
 import configparser
 import inspect
-import os
 import pathlib
 import socket
 import threading
@@ -27,15 +26,6 @@ import pytest
 
 from tunnel_infra.Tunnel import Tunnel
 from tunnel_infra.TunnelProcess import TunnelProcess
-
-# Real customer configs are never committed; point this at a local copy.
-# os.devnull is never a directory, so the tests skip when the var is unset.
-REAL_CONFIGS = pathlib.Path(os.environ.get("PYTUN_REAL_CONFIGS") or os.devnull)
-
-requires_real_configs = pytest.mark.skipif(
-    not REAL_CONFIGS.is_dir(),
-    reason="real customer configs not available at %s" % REAL_CONFIGS,
-)
 
 
 # ------------------------------------------------------- claim 9 (b): the destination
@@ -154,32 +144,30 @@ def test_channel_origin_address_cannot_redirect_the_connection(monkeypatch):
 
 # ------------------------------------------------------- claim 9 (b): read at startup
 
-@requires_real_configs
-def test_destinations_are_exactly_those_declared_in_the_config_files():
+def test_destinations_are_exactly_those_declared_in_the_config_files(synthetic_configs):
     """The reachable set equals the declared set — nothing more."""
     declared = set()
-    for ini in sorted(REAL_CONFIGS.glob("*.ini")):
+    for tunnel in synthetic_configs["tunnels"]:
         cfg = configparser.ConfigParser()
-        cfg.read(ini)
-        tunnel = cfg["tunnel"]
-        declared.add((tunnel["remote_host"], int(tunnel["remote_port"])))
+        cfg.read(tunnel["ini"])
+        section = cfg["tunnel"]
+        declared.add((section["remote_host"], int(section["remote_port"])))
 
     resolved = set()
-    for ini in sorted(REAL_CONFIGS.glob("*.ini")):
-        proc = TunnelProcess.from_config_file(str(ini))
+    for tunnel in synthetic_configs["tunnels"]:
+        proc = TunnelProcess.from_config_file(str(tunnel["ini"]))
         resolved.add((proc.recipient_host, proc.recipient_port))
 
     assert resolved == declared, (resolved, declared)
 
 
-@requires_real_configs
-def test_a_config_file_added_after_startup_is_not_picked_up_by_a_running_tunnel():
+def test_a_config_file_added_after_startup_is_not_picked_up_by_a_running_tunnel(synthetic_configs):
     """Claim 9: configs are read 'when the service starts'.
 
     A TunnelProcess built from a file holds its destination as instance state;
     editing the file afterwards does not move a running tunnel's target.
     """
-    ini = sorted(REAL_CONFIGS.glob("*.ini"))[0]
+    ini = synthetic_configs["tunnels"][0]["ini"]
     proc = TunnelProcess.from_config_file(str(ini))
     original = (proc.recipient_host, proc.recipient_port)
 

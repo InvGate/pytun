@@ -31,6 +31,13 @@ requires_real_configs = pytest.mark.skipif(
     reason="real customer configs not available at %s" % REAL_CONFIGS,
 )
 
+# NOTE: test_tunnel_private_key_is_ecdsa_on_nist_p256 and
+# test_no_tunnel_key_is_rsa_dsa_or_a_different_curve below are facts about the
+# infrastructure team's real key material (claim 6a: "ECDSA over NIST P-256"),
+# not about pytun's own behaviour. They keep requiring PYTUN_REAL_CONFIGS and
+# skip without it. Everything else in this file that only needed *some* valid
+# tunnel config now uses the synthetic_configs fixture.
+
 
 def tunnel_configs():
     if not REAL_CONFIGS.is_dir():
@@ -93,8 +100,7 @@ def test_no_tunnel_key_is_rsa_dsa_or_a_different_curve():
     assert set(curves.values()) == {"secp256r1"}, curves
 
 
-@requires_real_configs
-def test_private_keys_have_no_passphrase():
+def test_private_keys_have_no_passphrase(synthetic_configs):
     """Cross-checks a related claim.
 
     Claim 14 lists PasswordRequiredException as meaning "the private key has a
@@ -102,12 +108,29 @@ def test_private_keys_have_no_passphrase():
     the tunnel config docs require a passwordless key. Loading with
     password=None must therefore succeed.
     """
-    for ini_name, keyfile in keyfiles_from_configs():
-        serialization.load_pem_private_key(keyfile.read_bytes(), password=None)
+    for tunnel in synthetic_configs["tunnels"]:
+        serialization.load_pem_private_key(tunnel["keyfile"].read_bytes(), password=None)
 
 
-@requires_real_configs
-def test_server_key_is_a_known_hosts_entry_for_the_configured_server():
+def test_loader_accepts_a_synthetic_ecdsa_p256_key(synthetic_configs):
+    """The loader end-to-end accepts an ECDSA P-256 key file.
+
+    Distinct from the real-key fact test above: this proves
+    TunnelProcess.from_config_file() resolves the keyfile path and hands back
+    something paramiko can actually load as an ECDSA key, independent of
+    whatever curve real customer keys happen to use.
+    """
+    import paramiko
+
+    from tunnel_infra.TunnelProcess import TunnelProcess
+
+    for tunnel in synthetic_configs["tunnels"]:
+        proc = TunnelProcess.from_config_file(str(tunnel["ini"]))
+        loaded = paramiko.ECDSAKey.from_private_key_file(proc.key_file)
+        assert loaded.get_name() == "ecdsa-sha2-nistp256"
+
+
+def test_server_key_is_a_known_hosts_entry_for_the_configured_server(synthetic_configs):
     """Claim 6 (b): server_key holds the server's public key.
 
     It must be a known_hosts-format entry naming the host and port the tunnel
@@ -115,19 +138,20 @@ def test_server_key_is_a_known_hosts_entry_for_the_configured_server():
     """
     import configparser
 
-    for ini in tunnel_configs():
+    for tunnel in synthetic_configs["tunnels"]:
+        ini = tunnel["ini"]
         cfg = configparser.ConfigParser()
-        tunnel = cfg["tunnel"] if cfg.read(ini) and "tunnel" in cfg else None
-        assert tunnel is not None, ini
+        section = cfg["tunnel"] if cfg.read(ini) and "tunnel" in cfg else None
+        assert section is not None, ini
 
-        server_key = pathlib.Path(tunnel["server_key"])
+        server_key = pathlib.Path(section["server_key"])
         if not server_key.is_absolute():
-            server_key = ini.parent / tunnel["server_key"]
+            server_key = ini.parent / section["server_key"]
         assert server_key.is_file(), "server_key %s missing" % server_key
 
         content = server_key.read_text().strip()
-        host = tunnel["server_host"]
-        port = tunnel["server_port"]
+        host = section["server_host"]
+        port = section["server_port"]
 
         assert "[%s]:%s" % (host, port) in content, (
             "%s does not pin the configured server %s:%s" % (server_key.name, host, port)
