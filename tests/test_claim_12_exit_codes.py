@@ -24,8 +24,11 @@ import threading
 import pytest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REAL_CONFIGS = "/home/alejandro-cantero/VMShared/configuracion_connector/configs"
-PYTHON = os.path.join(REPO, ".venv-tests", "bin", "python")
+REAL_CONFIGS = os.environ.get(
+    "PYTUN_REAL_CONFIGS",
+    "/home/alejandro-cantero/VMShared/configuracion_connector/configs",
+)
+PYTHON = sys.executable
 
 # test_connections() probes each tunnel's remote_host:remote_port, so we
 # control the outcome by binding those targets or leaving them closed. The

@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=8
+pytest-cov>=6
+coverage>=7.10
