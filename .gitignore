@@ -144,3 +144,5 @@ configs/*
 
 # CodeGraph index
 .codegraph/
+
+.atl/
