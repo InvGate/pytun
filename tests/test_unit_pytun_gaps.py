@@ -258,6 +258,48 @@ class TestTestTunnelsParamikoExceptionBranches:
         failed = pytun.test_tunnels(["encrypted-key.ini"], logger)
         assert failed is True
 
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "BUG (pytun.py ~lines 297-308): paramiko.PasswordRequiredException "
+            "is a SUBCLASS of AuthenticationException, but test_tunnels()'s "
+            "`except AuthenticationException` clause is listed BEFORE its "
+            "`except PasswordRequiredException` clause. Python matches the "
+            "first compatible except clause, so the more specific "
+            "PasswordRequiredException handler (its 'is encrypted' message, "
+            "lines 304-308) is unreachable dead code -- every encrypted-key "
+            "failure is misreported with the generic 'was rejected' message "
+            "instead. This test proves the dead branch is unreachable; it "
+            "will XPASS (and must have its marker removed) once the except "
+            "clauses are reordered PasswordRequiredException-before-"
+            "AuthenticationException."
+        ),
+    )
+    def test_password_required_exception_uses_its_own_specific_message_not_authentication_exceptions(
+            self, monkeypatch, logger
+    ):
+        logged = []
+
+        class _RecordingLogger:
+            def info(self, *a, **k):
+                pass
+
+            def debug(self, *a, **k):
+                pass
+
+            def exception(self, msg, *a, **k):
+                logged.append(msg % a if a else msg)
+
+        monkeypatch.setattr(
+            pytun.TunnelProcess, "from_config_file",
+            staticmethod(self._client_that_raises_on_connect(paramiko.PasswordRequiredException("encrypted"))),
+        )
+        pytun.test_tunnels(["encrypted-key.ini"], _RecordingLogger())
+
+        assert len(logged) == 1
+        assert "is encrypted" in logged[0]
+        assert "was rejected" not in logged[0]
+
 
 class TestMainSecondAuthorizationCheckAndEmptyProcesses:
     """main()'s post-config device-authorization check (line ~162) and the
@@ -291,6 +333,159 @@ class TestMainSecondAuthorizationCheckAndEmptyProcesses:
         with pytest.raises(SystemExit) as exc_info:
             pytun.main()
         assert exc_info.value.code == 1
+
+
+class _TunnelDirsNoneParams(dict):
+    """A configparser-section-like object whose 'tunnel_dirs' is explicitly
+    None (unlike real configparser, which never yields None for a `.get()`
+    with a default) -- the only way to reach main()'s "tunnel_path is
+    invalid" dead-ish branch without crashing on `join(None, ...)` first.
+    """
+
+    def get(self, key, default=None):
+        if key == "tunnel_dirs":
+            return None
+        return dict.get(self, key, default)
+
+    def getboolean(self, key, default=None):
+        return dict.get(self, key, default)
+
+    def getint(self, key, default=None):
+        value = dict.get(self, key, default)
+        return int(value) if value is not None else default
+
+
+class _FakeConfigParser:
+    def __init__(self, params):
+        self._params = params
+
+    def read(self, path):
+        pass
+
+    def __contains__(self, key):
+        return key == "pytun"
+
+    def __getitem__(self, key):
+        return self._params
+
+
+class TestMainTestAllBranch:
+    """main()'s --test_all block (~lines 130-154): the ini-not-loaded branch,
+    the tunnel_path-is-None branch, the OSError-starting-the-inspection-server
+    branch, and the normal success path. input(), test_everything() and
+    (where relevant) inspection_http_server() are all monkeypatched so the
+    test never blocks on stdin or does real SSH/HTTP/network I/O.
+    """
+
+    def _prepare(self, monkeypatch, tmp_path, config_ini_argv=None):
+        monkeypatch.setattr(pytun, "get_application_path", lambda: str(tmp_path))
+        (tmp_path / "configs").mkdir(exist_ok=True)
+        argv = ["pytun.py", "--test_all"]
+        if config_ini_argv:
+            argv += ["--config_ini", config_ini_argv]
+        monkeypatch.setattr(pytun.sys, "argv", argv)
+        monkeypatch.setattr(pytun.Device, "is_authorized", lambda self: True)
+        monkeypatch.setattr("builtins.input", lambda *a, **kw: "")
+
+    def test_missing_ini_file_hits_params_equals_empty_branch(self, monkeypatch, tmp_path):
+        # No connector.ini written at all -> params == {}.
+        self._prepare(monkeypatch, tmp_path)
+        called = {}
+        monkeypatch.setattr(
+            pytun, "test_everything",
+            lambda files, logger, processes, introspection_thread=None: called.update(
+                introspection_thread=introspection_thread
+            ),
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            pytun.main()
+
+        assert exc_info.value.code == 0
+        assert called["introspection_thread"] is None
+
+    def test_tunnel_path_none_hits_tunnel_path_invalid_branch(self, monkeypatch, tmp_path):
+        ini_path = tmp_path / "connector.ini"
+        ini_path.write_text("[pytun]\ntunnel_manager_id=test-manager\n")
+        # Absolute --config_ini so main() never re-joins tunnel_path with
+        # application_path (which would crash on join(None, ...) first).
+        self._prepare(monkeypatch, tmp_path, config_ini_argv=str(ini_path))
+
+        fake_params = _TunnelDirsNoneParams(tunnel_manager_id="test-manager")
+        monkeypatch.setattr(
+            pytun.configparser, "ConfigParser", lambda: _FakeConfigParser(fake_params)
+        )
+        # tunnel_path is None, so the files list-comprehension must never
+        # actually call join(None, f); a listdir() returning nothing makes it
+        # a no-op regardless of what tunnel_path is.
+        monkeypatch.setattr(pytun, "listdir", lambda path: [])
+
+        called = {}
+        monkeypatch.setattr(
+            pytun, "test_everything",
+            lambda files, logger, processes, introspection_thread=None: called.update(
+                introspection_thread=introspection_thread, files=files
+            ),
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            pytun.main()
+
+        assert exc_info.value.code == 0
+        assert called["introspection_thread"] is None
+        assert called["files"] == []
+
+    def test_oserror_starting_inspection_server_is_logged_and_test_everything_still_runs(
+            self, monkeypatch, tmp_path
+    ):
+        ini_path = tmp_path / "connector.ini"
+        ini_path.write_text("[pytun]\ntunnel_manager_id=test-manager\n")
+        self._prepare(monkeypatch, tmp_path)
+
+        def _raising_inspection_http_server(*args, **kwargs):
+            raise OSError("Address already in use")
+
+        monkeypatch.setattr(pytun, "inspection_http_server", _raising_inspection_http_server)
+
+        called = {}
+        monkeypatch.setattr(
+            pytun, "test_everything",
+            lambda files, logger, processes, introspection_thread=None: called.update(
+                introspection_thread=introspection_thread
+            ),
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            pytun.main()
+
+        assert exc_info.value.code == 0
+        assert called["introspection_thread"] is None
+
+    def test_success_path_builds_inspection_thread_and_runs_test_everything(self, monkeypatch, tmp_path):
+        ini_path = tmp_path / "connector.ini"
+        ini_path.write_text("[pytun]\ntunnel_manager_id=test-manager\n")
+        self._prepare(monkeypatch, tmp_path)
+
+        class _FakeHttpServer:
+            def serve_forever(self):
+                pytest.fail("serve_forever() must never actually run in this test")
+
+        monkeypatch.setattr(pytun, "inspection_http_server", lambda *a, **k: _FakeHttpServer())
+
+        called = {}
+        monkeypatch.setattr(
+            pytun, "test_everything",
+            lambda files, logger, processes, introspection_thread=None: called.update(
+                introspection_thread=introspection_thread
+            ),
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            pytun.main()
+
+        assert exc_info.value.code == 0
+        assert called["introspection_thread"] is not None
+        assert called["introspection_thread"].daemon is True
 
 
 class TestMainConfigSectionAndMissingIni:
