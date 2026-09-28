@@ -76,12 +76,12 @@ class TestPooledAlerterExceptionIsNotPremature:
         pool = ThreadPoolExecutor(1)
         alerter = DifferentThreadAlert([slow], _RecordingLogger(), process_pool=pool)
 
-        start = time.monotonic()
         alerter.send_alert("tunnel-a")
-        elapsed = time.monotonic() - start
 
+        # `calls` is appended only after the sleep, so a non-empty list proves
+        # send_alert() waited for completion. No wall-clock assertion: timer
+        # resolution on Windows (~15 ms) makes those flaky.
         assert slow.calls == [("tunnel-a", None, False)]
-        assert elapsed >= 0.3
 
     def test_rate_limit_exception_from_the_pooled_call_is_logged_as_a_warning(self):
         alerter_stub = _SlowAlerter(delay=0, raise_error=RateLimitException("limited", 60))
