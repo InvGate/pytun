@@ -23,7 +23,6 @@ import stat
 import pytest
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-REAL_CONFIGS = pathlib.Path("/home/alejandro-cantero/VMShared/configuracion_connector/configs")
 
 EXCLUDED_DIRS = ("tests", "build", "dist", "__pycache__")
 
@@ -38,11 +37,6 @@ def _is_project_source(path):
 
 
 SOURCE_FILES = sorted(p for p in REPO.rglob("*.py") if _is_project_source(p))
-
-requires_real_configs = pytest.mark.skipif(
-    not REAL_CONFIGS.is_dir(),
-    reason="real customer configs not available at %s" % REAL_CONFIGS,
-)
 
 
 def all_source():
@@ -153,8 +147,7 @@ def test_dollar_style_environment_syntax_is_not_expanded():
 # ------------------------------------------------------------------- claim 5:
 # the keyfile is a plain file, resolved from config, not encrypted
 
-@requires_real_configs
-def test_keyfile_path_is_resolved_relative_to_the_config_directory():
+def test_keyfile_path_is_resolved_relative_to_the_config_directory(synthetic_configs):
     """Claim 5: 'a file on disk, inside the Connector's configuration directory'.
 
     A relative keyfile in the ini resolves against the config file's own
@@ -162,7 +155,8 @@ def test_keyfile_path_is_resolved_relative_to_the_config_directory():
     """
     from tunnel_infra.TunnelProcess import TunnelProcess
 
-    for ini in sorted(REAL_CONFIGS.glob("*.ini")):
+    for tunnel in synthetic_configs["tunnels"]:
+        ini = tunnel["ini"]
         cfg = configparser.ConfigParser()
         cfg.read(ini)
         declared = cfg["tunnel"]["keyfile"]
@@ -173,8 +167,7 @@ def test_keyfile_path_is_resolved_relative_to_the_config_directory():
         assert pathlib.Path(proc.key_file).is_file()
 
 
-@requires_real_configs
-def test_private_key_on_disk_is_not_encrypted():
+def test_private_key_on_disk_is_not_encrypted(synthetic_configs):
     """Claim 5: 'It is not encrypted.'
 
     An encrypted PEM carries a Proc-Type/DEK-Info header or uses the PKCS#8
@@ -184,8 +177,8 @@ def test_private_key_on_disk_is_not_encrypted():
     from cryptography.hazmat.primitives import serialization
     from tunnel_infra.TunnelProcess import TunnelProcess
 
-    for ini in sorted(REAL_CONFIGS.glob("*.ini")):
-        proc = TunnelProcess.from_config_file(str(ini))
+    for tunnel in synthetic_configs["tunnels"]:
+        proc = TunnelProcess.from_config_file(str(tunnel["ini"]))
         raw = pathlib.Path(proc.key_file).read_bytes()
 
         assert b"ENCRYPTED" not in raw, proc.key_file
@@ -210,15 +203,14 @@ def test_the_connector_never_sets_or_hardens_file_permissions():
         )
 
 
-@requires_real_configs
-def test_keyfile_is_readable_by_the_process_with_no_extra_credential():
+def test_keyfile_is_readable_by_the_process_with_no_extra_credential(synthetic_configs):
     """The practical meaning of 'protection depends on filesystem permissions'.
 
     Whoever can read the file has the key. Nothing else gates it.
     """
     from tunnel_infra.TunnelProcess import TunnelProcess
 
-    ini = sorted(REAL_CONFIGS.glob("*.ini"))[0]
+    ini = synthetic_configs["tunnels"][0]["ini"]
     proc = TunnelProcess.from_config_file(str(ini))
     key_path = pathlib.Path(proc.key_file)
 

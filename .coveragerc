@@ -1,0 +1,12 @@
+[run]
+source = .
+omit =
+    tests/*
+    setup.py
+# The CLI tests run pytun.py as a subprocess; patch it so those runs count.
+patch = subprocess
+parallel = True
+
+[report]
+show_missing = True
+skip_empty = True

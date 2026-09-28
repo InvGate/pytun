@@ -8,50 +8,38 @@ it at whatever frequency you need", and publishes this table:
     1 | Configuration error or device authorisation error
     2 | Notification configuration missing
 
-These tests run the real CLI as a subprocess against real customer configs and
-assert the published codes. Each run is given a private log dir so it never
+Connection-outcome tests (0 / 3) call pytun's own functions in-process, with
+test_internet_access() monkeypatched out: test_connections() always calls it,
+and it otherwise reaches 8.8.8.8:53 on the real internet, which these tests
+must not depend on. The remaining tests run the CLI as a subprocess, because
+the subprocess boundary is the point (real argv/exit-code behaviour) and
+those code paths never call test_internet_access.
+
+All configs are synthetic and each run is given a private log dir so it never
 touches the repo or a real installation.
 """
+import logging
 import os
 import pathlib
 import shutil
 import socket
 import subprocess
 import sys
-import time
 import threading
+import time
 
 import pytest
 
+import pytun
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REAL_CONFIGS = "/home/alejandro-cantero/VMShared/configuracion_connector/configs"
-PYTHON = os.path.join(REPO, ".venv-tests", "bin", "python")
-
-# test_connections() probes each tunnel's remote_host:remote_port, so we
-# control the outcome by binding those targets or leaving them closed. The
-# targets are read from the configs rather than hardcoded: the real set spans
-# more than one port, and a partial listener would fail every "all OK" run.
-def real_targets(configs_dir=None):
-    import configparser
-    targets = []
-    directory = configs_dir or REAL_CONFIGS
-    for ini in sorted(pathlib.Path(directory).glob("*.ini")):
-        cfg = configparser.ConfigParser()
-        cfg.read(ini)
-        tunnel = cfg["tunnel"]
-        targets.append((tunnel["remote_host"], int(tunnel["remote_port"])))
-    return targets
-
-requires_real_configs = pytest.mark.skipif(
-    not os.path.isdir(REAL_CONFIGS),
-    reason="real customer configs not available at %s" % REAL_CONFIGS,
-)
+PYTHON = sys.executable
 
 
 @pytest.fixture
 def install_dir(tmp_path):
     """A throwaway connector installation: connector.ini + configs/ + logs/."""
-    def build(configs_src=REAL_CONFIGS, ini_body=None):
+    def build(configs_src=None, ini_body=None):
         (tmp_path / "logs").mkdir(exist_ok=True)
         configs = tmp_path / "configs"
         if configs_src is not None:
@@ -136,11 +124,37 @@ class _Listeners:
         self.listeners = []
 
 
+def _targets(synthetic_configs):
+    return [(t["remote_host"], t["remote_port"]) for t in synthetic_configs["tunnels"]]
+
+
+def _files(synthetic_configs):
+    return [str(t["ini"]) for t in synthetic_configs["tunnels"]]
+
+
+def _port_is_free(host, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(1)
+        return probe.connect_ex((host, port)) != 0
+
+
+def _all_targets_free(targets):
+    return all(_port_is_free(h, p) for h, p in targets)
+
+
+def _wait_for_targets_free(targets, timeout=10.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if _all_targets_free(targets):
+            return True
+        time.sleep(0.2)
+    return _all_targets_free(targets)
+
+
 @pytest.fixture
-def local_services():
-    targets = real_targets()
-    # An earlier test in the same session may still be releasing these ports.
-    _wait_for_targets_free()
+def local_services(synthetic_configs):
+    targets = _targets(synthetic_configs)
+    _wait_for_targets_free(targets)
     deadline = time.time() + 10
     listeners = None
     while listeners is None:
@@ -154,65 +168,57 @@ def local_services():
     listeners.close()
 
 
-def _port_is_free(host, port):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.settimeout(1)
-        return probe.connect_ex((host, port)) != 0
+def _no_internet(logger):
+    """Stand-in for pytun.test_internet_access(): never touch the real network."""
+    return True
 
 
-def _all_targets_free():
-    return all(_port_is_free(h, p) for h, p in real_targets())
-
-
-def _wait_for_targets_free(timeout=10.0):
-    """Wait out a previous test's listeners before asserting on failure codes.
-
-    Ordering, not the product, is what makes the ports briefly busy: an
-    earlier test in the same session binds them. Waiting keeps these tests
-    real instead of silently skipping.
-    """
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if _all_targets_free():
-            return True
-        time.sleep(0.2)
-    return _all_targets_free()
-
-
-@requires_real_configs
-def test_exit_0_when_all_connections_succeed(install_dir, local_services):
+def test_exit_0_when_all_connections_succeed(monkeypatch, synthetic_configs, local_services):
     """Published code 0: all connections OK.
 
     Every target declared by the configs is listening.
     """
-    result = run_cli(install_dir(), "--test_connections")
-    assert result.returncode == 0, result.stdout + result.stderr
+    monkeypatch.setattr(pytun, "test_internet_access", _no_internet)
+    logger = logging.getLogger("claim12")
+    with pytest.raises(SystemExit) as exc:
+        pytun.test_connections_and_exit(_files(synthetic_configs), logger, {})
+    assert exc.value.code == 0
 
 
-@requires_real_configs
-def test_exit_3_when_a_connection_fails(install_dir):
+def test_exit_3_when_a_connection_fails(monkeypatch, synthetic_configs):
     """Published code 3: one or more connections failed."""
-    if not _wait_for_targets_free():
+    targets = _targets(synthetic_configs)
+    if not _wait_for_targets_free(targets):
         pytest.skip("a tunnel target is owned by something outside this test run")
 
-    result = run_cli(install_dir(), "--test_connections")
-    assert result.returncode == 3, result.stdout + result.stderr
+    monkeypatch.setattr(pytun, "test_internet_access", _no_internet)
+    logger = logging.getLogger("claim12")
+    with pytest.raises(SystemExit) as exc:
+        pytun.test_connections_and_exit(_files(synthetic_configs), logger, {})
+    assert exc.value.code == 3
 
 
-@requires_real_configs
-def test_exit_0_and_3_are_distinguishable_on_the_same_configs(install_dir):
+def test_exit_0_and_3_are_distinguishable_on_the_same_configs(monkeypatch, synthetic_configs):
     """The whole point of the claim: the code reflects reachability, not luck.
 
     Same configs, same command — only the service availability changes.
     """
-    if not _wait_for_targets_free():
+    targets = _targets(synthetic_configs)
+    if not _wait_for_targets_free(targets):
         pytest.skip("a tunnel target is owned by something outside this test run")
 
-    failed = run_cli(install_dir(), "--test_connections").returncode
+    monkeypatch.setattr(pytun, "test_internet_access", _no_internet)
+    logger = logging.getLogger("claim12")
 
-    listeners = _Listeners(real_targets())
+    with pytest.raises(SystemExit) as exc:
+        pytun.test_connections_and_exit(_files(synthetic_configs), logger, {})
+    failed = exc.value.code
+
+    listeners = _Listeners(targets)
     try:
-        ok = run_cli(install_dir(), "--test_connections").returncode
+        with pytest.raises(SystemExit) as exc:
+            pytun.test_connections_and_exit(_files(synthetic_configs), logger, {})
+        ok = exc.value.code
     finally:
         listeners.close()
 
@@ -221,13 +227,13 @@ def test_exit_0_and_3_are_distinguishable_on_the_same_configs(install_dir):
 
 def test_exit_2_when_smtp_notification_config_is_missing(install_dir):
     """Published code 2: notification configuration missing."""
-    result = run_cli(install_dir(configs_src=None), "--test_smtp")
+    result = run_cli(install_dir(), "--test_smtp")
     assert result.returncode == 2, result.stdout + result.stderr
 
 
 def test_exit_2_when_http_notification_config_is_missing(install_dir):
     """Published code 2, via the HTTP POST alerting path."""
-    result = run_cli(install_dir(configs_src=None), "--test_http")
+    result = run_cli(install_dir(), "--test_http")
     assert result.returncode == 2, result.stdout + result.stderr
 
 
@@ -236,7 +242,9 @@ def test_exit_code_is_nonzero_on_broken_configuration(install_dir):
 
     A tunnel_dirs pointing nowhere is the plainest configuration error there is.
     Asserted as non-zero-and-not-success rather than exactly 1, so the test
-    reports what the CLI actually does instead of assuming the table.
+    reports what the CLI actually does instead of assuming the table. This
+    path fails before test_connections() (and test_internet_access()) is ever
+    reached, so the subprocess boundary is safe to keep.
     """
     ini = (
         "[pytun]\n"
@@ -248,20 +256,24 @@ def test_exit_code_is_nonzero_on_broken_configuration(install_dir):
     assert result.returncode != 0, result.stdout + result.stderr
 
 
-@requires_real_configs
-def test_running_the_check_does_not_interfere_with_the_services(install_dir, local_services):
+def test_running_the_check_does_not_interfere_with_the_services(monkeypatch, synthetic_configs, local_services):
     """Claim 12: 'it does not interfere with the service'.
 
     After the check exits, every service is still reachable — the CLI neither
     stole a port nor left the targets broken. It is also safe to run twice.
     """
-    first = run_cli(install_dir(), "--test_connections")
-    assert first.returncode == 0, first.stdout + first.stderr
+    monkeypatch.setattr(pytun, "test_internet_access", _no_internet)
+    logger = logging.getLogger("claim12")
 
-    second = run_cli(install_dir(), "--test_connections")
-    assert second.returncode == 0, second.stdout + second.stderr
+    with pytest.raises(SystemExit) as exc:
+        pytun.test_connections_and_exit(_files(synthetic_configs), logger, {})
+    assert exc.value.code == 0
 
-    for host, port in real_targets():
+    with pytest.raises(SystemExit) as exc:
+        pytun.test_connections_and_exit(_files(synthetic_configs), logger, {})
+    assert exc.value.code == 0
+
+    for host, port in _targets(synthetic_configs):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
             probe.settimeout(2)
             assert probe.connect_ex((host, port)) == 0, (host, port)
