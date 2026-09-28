@@ -110,17 +110,19 @@ server_key=         keep_alive_time=30
 ### High Priority (bugs/correctness)
 1. **Global socket timeout** (`pytun.py:321`): `socket.setdefaulttimeout(3)` affects ALL sockets globally — should save/restore
 2. **Broad exception handlers**: 25+ instances of `except Exception` — hides real errors, use specific types
-3. **Windows `\\?\` path prefix**: duplicated strip logic at `pytun.py:82`, `pytun.py:118`, `observation/http_server.py:31` — needs `utils.normalize_windows_path()`
-4. **`select()` no timeout** (`tunnel_infra/Tunnel.py:82`): infinite wait possible — add 60s timeout
+3. **`Tunnel.__del__` crash** (`tunnel_infra/Tunnel.py:153`): `stop()` reads `self.timer` before it is assigned if `__init__` fails
+4. **Unstarted process terminate** (`pytun.py` `create_tunnels_from_config`): a bad config calls `terminate()` on never-started processes → `AttributeError` instead of `sys.exit(1)`
+5. **`tunnel_manager_id` not enforced** (`pytun.py` `main`): defaults to `''` but is checked against `None`
+6. **`select()` no timeout** (`tunnel_infra/Tunnel.py:82`): infinite wait possible — add 60s timeout
 
 ### Medium Priority
-5. **Race condition** (`alerts/pooled_alerter.py:29`): `future.exception()` called before future completes
-6. **Resource leak** (`pytun.py:340`): test processes created in `test_connections()` never terminated
-7. **MAC backward compat** (`device.py:67-70`): `if not self._mac_address_signature: return True` — remove in v2.0.0
-8. **Outdated deps**: `psutil==5.7.2` → 6.0+, `coloredlogs==14.0` → 15.0+
+7. **HTTP alert auth** (`alerts/http_post_alert.py`): sends Basic auth `None:None` when no credentials are configured
+8. **Resource leak** (`pytun.py:340`): test processes created in `test_connections()` never terminated
+9. **MAC backward compat** (`device.py:67-70`): `if not self._mac_address_signature: return True` — remove in v2.0.0
+10. **Outdated deps**: `psutil==5.7.2` → 6.0+, `coloredlogs==14.0` → 15.0+
+11. **Windows `\\?\` path prefix**: duplicated strip logic at `pytun.py:82`, `pytun.py:118`, `observation/http_server.py:31` — needs `utils.normalize_windows_path()`
 
-### No Automated Tests
-Zero unit tests exist. Manual tests only: `python pytun.py --test_all`. See [Testing](#testing).
+Known bugs are pinned as `xfail(strict=True)` tests: fixing one makes its test XPASS and fail until the marker is removed.
 
 ---
 
@@ -141,7 +143,15 @@ Zero unit tests exist. Manual tests only: `python pytun.py --test_all`. See [Tes
 
 ## Testing
 
-No automated tests. Manual CLI tests:
+Automated suite (pytest, ~80% coverage, runs in GitHub Actions on Linux and Windows):
+```bash
+pip install -r requirements-dev.txt
+python -m pytest                    # coverage floor enforced in pytest.ini
+PYTUN_REAL_CONFIGS=/path/to/configs python -m pytest  # also run real-key checks
+```
+Tests use synthetic configs (`synthetic_configs` fixture) and never reach the network.
+
+Manual CLI tests:
 ```bash
 python pytun.py --test_all          # Full diagnostic
 python pytun.py --test_connections  # Service connectivity
