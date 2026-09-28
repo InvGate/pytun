@@ -1,4 +1,4 @@
-# Build dependencies for the Windows .exe, installed by build.bat.
+# Build dependencies for the Windows .exe, installed by the pytun-build Jenkins jobs.
 # Pinned to the versions of the last production build (pytun-build, commit
 # a52ecc4) so staging and production produce the same binary.
 -r requirements.txt
