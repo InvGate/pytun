@@ -146,3 +146,7 @@ configs/*
 .codegraph/
 
 .atl/
+
+# internal tooling, not published (connector versions contain customer names)
+scripts/collect_connector_versions.py
+versions.csv
