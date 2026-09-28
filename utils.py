@@ -23,26 +23,6 @@ def get_bundle_path():
     return getattr(sys, '_MEIPASS', os.path.abspath("."))
 
 
-def normalize_windows_path(path):
-    """
-    Strip a leading Windows extended-length path prefix ("\\\\?\\") from `path`.
-
-    Hack: sometimes when running on Windows with pyinstaller and shawl a
-    "\\\\?\\" prefix gets added to cwd-derived paths and downstream os.path /
-    os.walk calls choke on it. This centralizes the strip that used to be
-    duplicated at pytun.py and observation/http_server.py.
-
-    :param path: A path string. Anything that isn't a str is returned unchanged.
-    :return: `path` with the extended-length prefix removed, if present.
-    """
-    if not isinstance(path, str):
-        return path
-    prefix = "\\\\?\\"
-    if path.startswith(prefix):
-        return path[len(prefix):]
-    return path
-
-
 def get_net_if_mac_addresses():
     """
     :return: All the network interfaces MAC addresses

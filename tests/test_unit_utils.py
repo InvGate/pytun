@@ -1,10 +1,7 @@
 """Unit tests for utils.py pure helpers.
 
 Covers get_application_path()'s frozen/PyInstaller branch, get_bundle_path(),
-get_net_if_mac_addresses() (with psutil mocked so no real NICs are touched),
-and normalize_windows_path() -- a new helper introduced here to de-duplicate
-the "\\\\?\\" prefix stripping hack that was previously copy-pasted at
-pytun.py (~L83, ~L119) and observation/http_server.py (~L32, ~L109).
+and get_net_if_mac_addresses() (with psutil mocked so no real NICs are touched).
 """
 import os
 import sys
@@ -13,37 +10,6 @@ import types
 import pytest
 
 import utils
-
-
-class TestNormalizeWindowsPath:
-    """New utils.normalize_windows_path(path): strips a leading Windows
-    extended-length prefix ("\\\\?\\"), added by some Windows/pyinstaller/shawl
-    combinations, so downstream os.path / os.walk calls behave normally.
-    """
-
-    def test_strips_extended_length_prefix(self):
-        raw = "\\\\?\\C:\\Users\\svc\\logs"
-        assert utils.normalize_windows_path(raw) == "C:\\Users\\svc\\logs"
-
-    def test_leaves_path_without_prefix_unchanged(self):
-        raw = "C:\\Users\\svc\\logs"
-        assert utils.normalize_windows_path(raw) == raw
-
-    def test_leaves_posix_path_unchanged(self):
-        raw = "/home/svc/logs"
-        assert utils.normalize_windows_path(raw) == raw
-
-    def test_non_str_input_is_returned_unchanged(self):
-        # Defensive: callers only ever pass str paths in this codebase, but the
-        # helper must not raise on something else (e.g. None, a Path object).
-        assert utils.normalize_windows_path(None) is None
-        sentinel = object()
-        assert utils.normalize_windows_path(sentinel) is sentinel
-
-    def test_only_strips_leading_prefix_not_occurrences_elsewhere(self):
-        # The prefix is only meaningful when it starts the string.
-        raw = "C:\\Users\\weird\\\\?\\literal"
-        assert utils.normalize_windows_path(raw) == raw
 
 
 class TestIsAppRunningAsPyinstallerBundle:

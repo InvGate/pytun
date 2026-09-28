@@ -28,7 +28,7 @@ class TestPathTypeIsCurrentlyANoop:
         assert path_type("-") == "-"
 
     def test_windows_extended_length_prefix_is_left_untouched(self):
-        # Unlike utils.normalize_windows_path(), PathType does no stripping.
+        # PathType does no stripping; callers in pytun.py handle the prefix.
         path_type = PathType()
         raw = "\\\\?\\C:\\Users\\svc\\logs"
         assert path_type(raw) == raw
