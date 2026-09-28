@@ -49,8 +49,8 @@ class _TemporarilyWindows:
 
 
 class TestServiceIsRunning:
-    def test_non_windows_always_returns_false(self, logger):
-        assert pytun.os.name != "nt", "test host is expected to be non-Windows"
+    def test_non_windows_always_returns_false(self, monkeypatch, logger):
+        monkeypatch.setattr(pytun.os, "name", "posix")
         assert pytun.test_service_is_running(logger) is False
 
     def test_windows_running_service_returns_true(self, monkeypatch, logger):
