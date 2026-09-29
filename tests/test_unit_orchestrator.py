@@ -417,15 +417,6 @@ class TestMainDispatch:
         monkeypatch.setattr(pytun, "get_application_path", lambda: str(tmp_path))
         monkeypatch.setattr(pytun.sys, "argv", ["pytun.py", "--test_smtp"])
         monkeypatch.setattr(pytun.Device, "is_authorized", lambda self: True)
-        # Avoid a real DNS MX lookup from email_validator's deliverability
-        # check -- no external network in tests.
-        import alerts.email_alert as email_alert_module
-
-        class _FakeValidated:
-            def __init__(self, email):
-                self.email = email
-
-        monkeypatch.setattr(email_alert_module, "validate_email", lambda addr: _FakeValidated(addr))
         calls = {}
 
         def fake_test_mail_and_exit(logger, smtp_sender):

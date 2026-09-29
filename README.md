@@ -455,13 +455,13 @@ ls -la connector.ini
 ### Python Dependencies
 
 ```
-coloredlogs==14.0              # Colored logging output
+coloredlogs==15.0.1            # Colored logging output
 cryptography                   # RSA-PSS device authorization (transitive via paramiko)
 deckar01-ratelimit==3.0.2      # Rate limiting for alerts
-email-validator==1.1.1         # Email address validation
-paramiko==3.4.0                # SSH protocol implementation
-psutil==5.7.2                  # System and process utilities
-requests==2.32.4               # HTTP requests for alerts
+email-validator==2.3.0         # Email address validation
+paramiko==3.5.1                # SSH protocol implementation
+psutil==7.1.0                  # System and process utilities
+requests==2.33.0               # HTTP requests for alerts
 ```
 
 ### Platform Support
