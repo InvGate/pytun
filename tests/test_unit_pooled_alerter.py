@@ -142,3 +142,19 @@ class TestPooledAlerterExceptionIsNotPremature:
         alerter = PooledAlerter([], _RecordingLogger())
         assert alerter.pool is not None
         alerter.pool.shutdown(wait=True)
+
+    def test_get_default_pool_is_abstract_on_the_base_class(self):
+        alerter = PooledAlerter([], _RecordingLogger())
+        with pytest.raises(NotImplementedError):
+            alerter.get_default_pool()
+        alerter.pool.shutdown(wait=True)
+
+    def test_different_thread_alert_get_default_pool_returns_a_thread_pool_executor(self):
+        pool = ThreadPoolExecutor(1)
+        alerter = DifferentThreadAlert([], _RecordingLogger(), process_pool=pool)
+        default_pool = alerter.get_default_pool()
+        try:
+            assert isinstance(default_pool, ThreadPoolExecutor)
+        finally:
+            default_pool.shutdown(wait=True)
+            pool.shutdown(wait=True)

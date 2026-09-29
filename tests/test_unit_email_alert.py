@@ -498,3 +498,52 @@ class TestBuildMessage:
         )
         message = sender._build_message(None, "just a message")
         assert message["Subject"] == "Connector notification"
+
+
+class TestSendmailPartialFailureIsWarned:
+    """smtplib.sendmail() returns a non-empty dict of {refused_recipient: reason}
+    for recipients it could not deliver to, even when the overall call
+    succeeds; that must be surfaced as a warning rather than silently dropped.
+    """
+
+    def test_non_empty_sendmail_result_logs_a_warning(self, logger, monkeypatch):
+        warnings = []
+
+        class _WarningCapturingLogger:
+            def info(self, *a, **k):
+                pass
+
+            def warning(self, *a, **k):
+                warnings.append((a, k))
+
+            def exception(self, *a, **k):
+                pytest.fail("should not log an exception on a merely partial failure")
+
+        class FakeSMTP:
+            def __init__(self, host, port, timeout=None):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def sendmail(self, *args):
+                return {"unreachable@example.com": (550, b"mailbox unavailable")}
+
+        monkeypatch.setattr("smtplib.SMTP", FakeSMTP)
+        sender = EmailAlertSender(
+            tunnel_manager_id="mgr-1",
+            host="smtp.example.com",
+            login=None,
+            password=None,
+            from_address="alerts@example.com",
+            to_address="ops@example.com",
+            logger=_WarningCapturingLogger(),
+        )
+
+        sender.send_alert("partial-failure-tunnel")
+
+        assert len(warnings) == 1
+        assert "unreachable@example.com" in str(warnings[0])

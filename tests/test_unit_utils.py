@@ -103,3 +103,80 @@ class TestCleanRuntimeTempdir:
             pytest.skip("this branch only applies when os.name != 'nt'")
         logger = types.SimpleNamespace(warning=lambda *a, **k: pytest.fail("should not warn"))
         utils.clean_runtime_tempdir(logger)
+
+    def _make_bundle(self, monkeypatch, tmp_path):
+        """Simulate a frozen, PyInstaller-bundled Windows app whose current
+        _MEIxxx folder lives inside tmp_path, so clean_runtime_tempdir()
+        scans tmp_path (not a real system temp dir).
+        """
+        current = tmp_path / "_MEIcurrent"
+        current.mkdir()
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(sys, "_MEIPASS", str(current), raising=False)
+        monkeypatch.setattr(utils.os, "name", "nt")
+        return current
+
+    def test_deletes_old_folders_keeps_current_and_young(self, monkeypatch, tmp_path):
+        current = self._make_bundle(monkeypatch, tmp_path)
+
+        old_folder = tmp_path / "_MEIold"
+        old_folder.mkdir()
+        young_folder = tmp_path / "_MEIyoung"
+        young_folder.mkdir()
+
+        now = 10_000.0
+        ctimes = {
+            str(current): now - 5,  # young, but also "current" -> always kept
+            str(old_folder): now - 3600,  # older than the 15 min threshold
+            str(young_folder): now - 10,  # within the threshold
+        }
+        monkeypatch.setattr(utils.time, "time", lambda: now)
+        monkeypatch.setattr(utils.os.path, "getctime", lambda p: ctimes[p])
+
+        warnings = []
+        logger = types.SimpleNamespace(warning=lambda *a, **k: warnings.append(a))
+
+        utils.clean_runtime_tempdir(logger, time_threshold=15 * 60)
+
+        assert not old_folder.exists()
+        assert current.exists()
+        assert young_folder.exists()
+        assert warnings == []
+
+    def test_rmtree_failure_is_logged_as_warning_and_not_raised(self, monkeypatch, tmp_path):
+        current = self._make_bundle(monkeypatch, tmp_path)
+        old_folder = tmp_path / "_MEIold"
+        old_folder.mkdir()
+
+        now = 10_000.0
+        monkeypatch.setattr(utils.time, "time", lambda: now)
+        monkeypatch.setattr(utils.os.path, "getctime", lambda p: now - 3600)
+
+        def _raising_rmtree(path):
+            raise OSError("permission denied")
+
+        monkeypatch.setattr(utils.shutil, "rmtree", _raising_rmtree)
+
+        warnings = []
+        logger = types.SimpleNamespace(
+            warning=lambda msg, **k: warnings.append(msg)
+        )
+
+        utils.clean_runtime_tempdir(logger, time_threshold=15 * 60)  # must not raise
+
+        assert len(warnings) == 1
+        assert str(old_folder) in warnings[0]
+
+    def test_ignores_files_alongside_the_mei_folders(self, monkeypatch, tmp_path):
+        current = self._make_bundle(monkeypatch, tmp_path)
+        stray_file = tmp_path / "not_a_folder.txt"
+        stray_file.write_text("hi")
+
+        monkeypatch.setattr(utils.time, "time", lambda: 10_000.0)
+        monkeypatch.setattr(utils.os.path, "getctime", lambda p: 10_000.0 - 3600)
+
+        logger = types.SimpleNamespace(warning=lambda *a, **k: pytest.fail("should not warn"))
+
+        utils.clean_runtime_tempdir(logger, time_threshold=15 * 60)  # must not raise
+
+        assert stray_file.exists()
