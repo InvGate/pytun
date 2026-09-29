@@ -193,12 +193,12 @@ curl http://localhost:9999/logs -o logs.zip         # Download logs
 {
   "status": "ok",
   "version": "1.1.20",
-  "os": "Windows-2016Server-10.0.14393-SP0",
+  "os": "Windows-10-10.0.14393-SP0",
   "machine": "AMD64"
 }
 ```
 
-`os` is the operating system name and version. `machine` is the OS architecture as the OS reports it. On Windows it is the real OS architecture even when the connector executable is 32-bit.
+`os` is the operating system name and version. Windows Server reports the Windows 10 kernel version, so the build number identifies the server release: `14393` is Server 2016, `17763` is Server 2019 and `20348` is Server 2022. `machine` is the OS architecture as the OS reports it. On Windows it is the real OS architecture even when the connector executable is 32-bit.
 
 | `machine` | Architecture | Bits |
 |-----------|--------------|------|
