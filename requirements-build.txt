@@ -23,7 +23,7 @@ dnspython==2.6.1
 humanfriendly==10.0
 idna==3.7
 pycparser==2.20
-pynacl==1.5.0
+pynacl==1.6.2
 pyreadline3==3.4.1
 six==1.14.0
 urllib3==1.26.18
