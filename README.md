@@ -188,6 +188,28 @@ curl http://localhost:9999/configs -o configs.zip   # Download configs
 curl http://localhost:9999/logs -o logs.zip         # Download logs
 ```
 
+**Health Check Response Example**:
+```json
+{
+  "status": "ok",
+  "version": "1.1.20",
+  "os": "Windows-10-10.0.14393-SP0",
+  "os_name": "Windows Server 2016 Standard",
+  "machine": "AMD64"
+}
+```
+
+`os` is the operating system name and version. Windows Server reports the Windows 10 kernel version, so the build number identifies the server release: `14393` is Server 2016, `17763` is Server 2019 and `20348` is Server 2022. `os_name` is the commercial name and edition read from the Windows registry (`ProductName`); it is empty on other operating systems. Windows 11 still reports "Windows 10" in the registry, so builds `22000` and later are corrected to "Windows 11". `machine` is the OS architecture as the OS reports it. On Windows it is the real OS architecture even when the connector executable is 32-bit.
+
+| `machine` | Architecture | Bits |
+|-----------|--------------|------|
+| `AMD64` | Intel/AMD 64-bit (Windows name) | 64 |
+| `x86_64` | Intel/AMD 64-bit (Linux name) | 64 |
+| `x86`, `i386`, `i686` | Intel/AMD 32-bit | 32 |
+| `ARM64` | ARM 64-bit (Windows name) | 64 |
+| `aarch64` | ARM 64-bit (Linux name) | 64 |
+| `IA64` | Intel Itanium (discontinued) | 64 |
+
 **Status Response Example**:
 ```json
 {

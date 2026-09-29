@@ -1,5 +1,6 @@
 import configparser
 import os
+import platform
 import tempfile
 import zipfile
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -14,6 +15,51 @@ except ImportError:
     from http.server import HTTPServer as HttpServer
 from http.server import SimpleHTTPRequestHandler
 import json
+
+
+WINDOWS_11_FIRST_BUILD = 22000
+_WINDOWS_VERSION_KEY = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+
+
+def _read_windows_product():
+    """Return (ProductName, CurrentBuildNumber) from the registry, or None off Windows."""
+    try:
+        import winreg
+    except ImportError:
+        return None
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _WINDOWS_VERSION_KEY) as key:
+            product_name = winreg.QueryValueEx(key, "ProductName")[0]
+            build = winreg.QueryValueEx(key, "CurrentBuildNumber")[0]
+    except OSError:
+        return None
+    return product_name, build
+
+
+def get_os_name():
+    """Commercial OS name, e.g. "Windows Server 2016 Standard"; empty off Windows."""
+    product = _read_windows_product()
+    if product is None:
+        return ""
+    product_name, build = product
+    # Windows 11 still reports "Windows 10" in ProductName; the build tells them apart.
+    try:
+        is_windows_11 = int(build) >= WINDOWS_11_FIRST_BUILD
+    except ValueError:
+        is_windows_11 = False
+    if is_windows_11 and product_name.startswith("Windows 10"):
+        return "Windows 11" + product_name[len("Windows 10"):]
+    return product_name
+
+
+def get_platform_info():
+    # On Windows platform.machine() reads PROCESSOR_ARCHITEW6432 first,
+    # so it returns the real OS architecture even from a 32-bit executable.
+    return {
+        "os": platform.platform(),
+        "os_name": get_os_name(),
+        "machine": platform.machine(),
+    }
 
 
 class RequestHandlerClassFactory:
@@ -133,7 +179,7 @@ class RequestHandlerClassFactory:
 
 
             def handle_ping(self):
-                return {'status': 'ok', "version": self.pytun_Version}
+                return dict({'status': 'ok', "version": self.pytun_Version}, **get_platform_info())
 
         return TunnelRequestHandler
 

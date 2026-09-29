@@ -8,7 +8,7 @@
 **Endpoints**:
 | Endpoint | Response |
 |----------|----------|
-| `GET /` | Version + running status |
+| `GET /` | Version, running status, OS (`os`), commercial OS name (`os_name`) and OS architecture (`machine`); `machine` values are listed in the README |
 | `GET /status` | Tunnel status, restart counts, MAC address, service connectivity |
 | `GET /configs` | **ZIP of all config files — includes SSH keys and passwords** |
 | `GET /logs` | ZIP of all log files |

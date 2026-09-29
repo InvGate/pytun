@@ -24,7 +24,7 @@ import pytest
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
-EXCLUDED_DIRS = ("tests", "build", "dist", "__pycache__")
+EXCLUDED_DIRS = ("tests", "scripts", "build", "dist", "__pycache__")
 
 
 def _is_project_source(path):
