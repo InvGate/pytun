@@ -15,16 +15,17 @@ pywin32==312
 pywin32-ctypes==0.2.2
 
 # Transitive runtime dependencies of requirements.txt
-# cryptography 44.0.3 is the last release with win32 wheels.
+# cryptography 48.0.1 is the last release with win32 wheels (49.0.0 has none).
 bcrypt==5.0.0
 certifi==2026.7.22
 cffi==2.1.1
 charset-normalizer==3.5.1
-cryptography==44.0.3
+cryptography==48.0.1
 dnspython==2.8.0
 humanfriendly==10.0
 idna==3.20
 pycparser==3.0
 pynacl==1.6.2
 pyreadline3==3.5.6
+typing-extensions==4.16.0
 urllib3==2.8.0
