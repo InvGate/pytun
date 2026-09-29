@@ -188,6 +188,27 @@ curl http://localhost:9999/configs -o configs.zip   # Download configs
 curl http://localhost:9999/logs -o logs.zip         # Download logs
 ```
 
+**Health Check Response Example**:
+```json
+{
+  "status": "ok",
+  "version": "1.1.20",
+  "os": "Windows-2016Server-10.0.14393-SP0",
+  "machine": "AMD64"
+}
+```
+
+`os` is the operating system name and version. `machine` is the OS architecture as the OS reports it. On Windows it is the real OS architecture even when the connector executable is 32-bit.
+
+| `machine` | Architecture | Bits |
+|-----------|--------------|------|
+| `AMD64` | Intel/AMD 64-bit (Windows name) | 64 |
+| `x86_64` | Intel/AMD 64-bit (Linux name) | 64 |
+| `x86`, `i386`, `i686` | Intel/AMD 32-bit | 32 |
+| `ARM64` | ARM 64-bit (Windows name) | 64 |
+| `aarch64` | ARM 64-bit (Linux name) | 64 |
+| `IA64` | Intel Itanium (discontinued) | 64 |
+
 **Status Response Example**:
 ```json
 {

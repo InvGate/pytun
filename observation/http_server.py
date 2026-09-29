@@ -1,5 +1,6 @@
 import configparser
 import os
+import platform
 import tempfile
 import zipfile
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -14,6 +15,15 @@ except ImportError:
     from http.server import HTTPServer as HttpServer
 from http.server import SimpleHTTPRequestHandler
 import json
+
+
+def get_platform_info():
+    # On Windows platform.machine() reads PROCESSOR_ARCHITEW6432 first,
+    # so it returns the real OS architecture even from a 32-bit executable.
+    return {
+        "os": platform.platform(),
+        "machine": platform.machine(),
+    }
 
 
 class RequestHandlerClassFactory:
@@ -133,7 +143,7 @@ class RequestHandlerClassFactory:
 
 
             def handle_ping(self):
-                return {'status': 'ok', "version": self.pytun_Version}
+                return dict({'status': 'ok', "version": self.pytun_Version}, **get_platform_info())
 
         return TunnelRequestHandler
 
