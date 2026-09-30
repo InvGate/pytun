@@ -30,7 +30,8 @@ Cloud Application → SSH Server → pytun Connector → Local Service
 
 ### Prerequisites
 
-- Python 3.6+ (recommended: 3.10+)
+- Python 3.10+ to run from source
+- The Windows installer (1.2.0+) requires 64-bit Windows Server 2016 / Windows 10 1607 or later
 - SSH access to a bastion/jump host
 - Passwordless SSH key pair
 
