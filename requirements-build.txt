@@ -1,31 +1,27 @@
 # Build dependencies for the Windows .exe, installed by the pytun-build Jenkins jobs.
-# Resolved for Python 3.10 32-bit (the Windows2022Worker interpreter), binary
-# wheels only. The PyInstaller toolchain stays on the versions validated in
-# the last production build (a52ecc4); only runtime dependencies moved.
+# Resolved for Python 3.14 64-bit (x86_64-pc-windows-msvc), binary wheels only.
 -r requirements.txt
 
 # PyInstaller toolchain
-pyinstaller==4.8
-pyinstaller-hooks-contrib==2024.4
-altgraph==0.17.4
-pefile==2023.2.7
-packaging==24.0
-setuptools==58.1.0
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.7
+altgraph==0.17.5
+pefile==2024.8.26
+packaging==26.3
+setuptools==84.0.0
 pywin32==312
-pywin32-ctypes==0.2.2
+pywin32-ctypes==0.2.3
 
 # Transitive runtime dependencies of requirements.txt
-# cryptography 48.0.1 is the last release with win32 wheels (49.0.0 has none).
 bcrypt==5.0.0
 certifi==2026.7.22
 cffi==2.1.1
 charset-normalizer==3.5.1
-cryptography==48.0.1
+cryptography==50.0.1
 dnspython==2.8.0
 humanfriendly==10.0
 idna==3.20
 pycparser==3.0
 pynacl==1.6.2
 pyreadline3==3.5.6
-typing-extensions==4.16.0
 urllib3==2.8.0
