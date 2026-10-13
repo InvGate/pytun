@@ -8,7 +8,7 @@
 
 **Flow**: Cloud server ← SSH reverse tunnel ← Local connector → Local service
 
-- **Language**: Python 3.6+ (current: 3.10.11)
+- **Language**: Python 3.10+ (the Windows .exe is built with Python 3.14 x64)
 - **Core libs**: `paramiko==3.5.1`, `psutil==7.1.0`, `requests==2.33.0`
 - **Packaging**: PyInstaller → Windows `.exe`
 - **Platform**: Windows (primary), Linux (supported)
@@ -119,7 +119,7 @@ server_key=         keep_alive_time=30
 7. **HTTP alert auth** (`alerts/http_post_alert.py`): sends Basic auth `None:None` when no credentials are configured
 8. **Resource leak** (`pytun.py:340`): test processes created in `test_connections()` never terminated
 9. **MAC backward compat** (`device.py:67-70`): `if not self._mac_address_signature: return True` — remove in v2.0.0
-10. **OpenSSL 1.1 in the .exe**: Python 3.10 bundles OpenSSL 1.1 (EOL 2023); fixed by the Python 3.14 upgrade (2.0.0)
+10. **OpenSSL 1.1 in the .exe**: fixed in 1.2.0; the .exe now bundles Python 3.14 and OpenSSL 3
 11. **Windows `\\?\` path prefix**: duplicated strip logic at `pytun.py:82`, `pytun.py:118`, `observation/http_server.py:31` — needs `utils.normalize_windows_path()`
 
 Known bugs are pinned as `xfail(strict=True)` tests: fixing one makes its test XPASS and fail until the marker is removed.

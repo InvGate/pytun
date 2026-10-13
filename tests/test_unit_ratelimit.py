@@ -6,6 +6,10 @@ by a monkeypatched `time` module. To stay fast and deterministic without
 sleeping, tests use a small `calls` budget and a long `period` (so the window
 never actually expires during the test) and assert on immediate
 RateLimitException behaviour instead of waiting for the window to reset.
+
+The package keeps that table in a shared in-memory database named after the
+function and its arguments, and it can outlive a test, so each test uses its
+own function name to avoid inheriting another test's call count.
 """
 import pytest
 from ratelimit.exception import RateLimitException
@@ -18,46 +22,46 @@ class TestRatelimitByArgs:
         calls = []
 
         @ratelimit_by_args(calls=2, period=3600)
-        def do_call(x):
+        def call_allows_calls_up_to_the_limit(x):
             calls.append(x)
             return x
 
-        assert do_call("a") == "a"
-        assert do_call("a") == "a"
+        assert call_allows_calls_up_to_the_limit("a") == "a"
+        assert call_allows_calls_up_to_the_limit("a") == "a"
         assert calls == ["a", "a"]
 
     def test_raises_once_limit_exceeded_for_same_args(self):
         @ratelimit_by_args(calls=2, period=3600)
-        def do_call(x):
+        def call_raises_once_limit_exceeded_for_same_args(x):
             return x
 
-        do_call("a")
-        do_call("a")
+        call_raises_once_limit_exceeded_for_same_args("a")
+        call_raises_once_limit_exceeded_for_same_args("a")
         with pytest.raises(RateLimitException):
-            do_call("a")
+            call_raises_once_limit_exceeded_for_same_args("a")
 
     def test_different_positional_args_get_independent_limits(self):
         @ratelimit_by_args(calls=1, period=3600)
-        def do_call(x):
+        def call_different_positional_args_get_independent_limits(x):
             return x
 
-        do_call("a")
+        call_different_positional_args_get_independent_limits("a")
         # "b" hasn't been called before, so it gets its own fresh bucket.
-        do_call("b")
+        call_different_positional_args_get_independent_limits("b")
         with pytest.raises(RateLimitException):
-            do_call("a")
+            call_different_positional_args_get_independent_limits("a")
         with pytest.raises(RateLimitException):
-            do_call("b")
+            call_different_positional_args_get_independent_limits("b")
 
     def test_different_keyword_args_get_independent_limits(self):
         @ratelimit_by_args(calls=1, period=3600)
-        def do_call(**kwargs):
+        def call_different_keyword_args_get_independent_limits(**kwargs):
             return kwargs
 
-        do_call(name="tunnel1")
-        do_call(name="tunnel2")
+        call_different_keyword_args_get_independent_limits(name="tunnel1")
+        call_different_keyword_args_get_independent_limits(name="tunnel2")
         with pytest.raises(RateLimitException):
-            do_call(name="tunnel1")
+            call_different_keyword_args_get_independent_limits(name="tunnel1")
 
     def test_wraps_preserves_function_metadata(self):
         @ratelimit_by_args(calls=5, period=3600)

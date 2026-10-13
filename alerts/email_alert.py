@@ -39,8 +39,8 @@ class EmailAlertSender(AlertSender):
         self.host = host
         self.login = login
         self.password = password
-        self.sender_email = validate_email(from_address, check_deliverability=False).email
-        self.receiver_email = validate_email(to_address, check_deliverability=False).email
+        self.sender_email = validate_email(from_address, check_deliverability=False).normalized
+        self.receiver_email = validate_email(to_address, check_deliverability=False).normalized
         self.logger = logger
 
     @ratelimit_by_args(calls=1, period=SMTP_ALERT_RATE_LIMIT)

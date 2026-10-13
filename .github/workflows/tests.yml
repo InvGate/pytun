@@ -14,7 +14,7 @@ jobs:
       matrix:
         os: [ ubuntu-latest, windows-latest ]
         # 3.10 is the interpreter bundled by PyInstaller for releases.
-        python-version: [ "3.10" ]
+        python-version: [ "3.14" ]
 
     steps:
       - uses: actions/checkout@v4
