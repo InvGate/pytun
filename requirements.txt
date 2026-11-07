@@ -1,6 +1,6 @@
 coloredlogs==15.0.1
 deckar01-ratelimit==3.0.2
 email-validator==2.3.0
-paramiko==3.5.1
+paramiko==5.0.0
 psutil==7.1.0
 requests==2.33.0
