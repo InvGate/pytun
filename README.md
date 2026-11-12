@@ -86,7 +86,7 @@ smtp_password=your-password           # SMTP password (plain text)
 smtp_from=connector@example.com       # From address
 smtp_to=admin@example.com             # Alert recipient
 smtp_tls_verify=True                  # Verify the server certificate (False only for self-signed)
-# Microsoft 365: OAuth2 instead of smtp_password (requires tls|ssl), see docs/smtp_oauth.md
+# Microsoft 365: OAuth2 instead of smtp_password (requires tls|ssl), see docs/smtp_oauth.textile
 # smtp_oauth_token_url=https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token
 # smtp_oauth_client_id=<application-client-id>
 # smtp_oauth_client_secret=<client-secret-value>

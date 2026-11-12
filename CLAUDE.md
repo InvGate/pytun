@@ -138,7 +138,7 @@ Known bugs are pinned as `xfail(strict=True)` tests: fixing one makes its test X
 - [ ] No secrets/credentials in code
 - [ ] Update relevant CLAUDE.md if adding components
 
-**Code style**: Follow existing patterns. Add type hints where possible but maintain 3.6+ compatibility (`Union[str, int]` not `str | int`).
+**Code style**: Follow existing patterns. Add type hints where possible. The baseline is Python 3.10, the version TMT (the service pytun talks to) runs, so `str | int` is fine.
 
 **Path resolution**: Main config paths are relative to the application directory; tunnel config paths (e.g. `keyfile`) are relative to the config file's directory.
 

@@ -103,6 +103,16 @@ class TestGetSmtpAlertSender:
         ini = "\n".join(line for line in self.OAUTH_INI.splitlines() if "oauth" not in line)
         assert pytun.get_smtp_alert_sender(logger, "abc", _params_from_ini(tmp_path, ini)).oauth is None
 
+    def test_any_oauth_key_turns_oauth_on_so_a_missing_client_id_is_not_ignored(self, tmp_path, logger):
+        ini = self.OAUTH_INI.replace("smtp_oauth_client_id=client-id\n", "") + "smtp_password=old-password\n"
+        with pytest.raises(SystemExit):
+            pytun.get_smtp_alert_sender(logger, "abc", _params_from_ini(tmp_path, ini))
+
+    def test_an_empty_oauth_key_counts_as_missing(self, tmp_path, logger):
+        ini = self.OAUTH_INI.replace("smtp_oauth_client_id=client-id", "smtp_oauth_client_id=")
+        with pytest.raises(SystemExit):
+            pytun.get_smtp_alert_sender(logger, "abc", _params_from_ini(tmp_path, ini))
+
     def test_exits_when_an_oauth_key_is_missing(self, tmp_path, logger):
         ini = self.OAUTH_INI.replace("smtp_oauth_scope=https://outlook.office365.com/.default\n", "")
         with pytest.raises(SystemExit):

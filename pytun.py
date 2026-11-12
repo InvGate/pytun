@@ -19,7 +19,7 @@ import coloredlogs
 from paramiko import BadHostKeyException, PasswordRequiredException, AuthenticationException, SSHException
 import psutil
 
-from alerts.email_alert import EmailAlertSender
+from alerts.email_alert import EmailAlertSender, OAUTH_KEYS
 from alerts.http_post_alert import HTTPPostAlertSender
 from alerts.pooled_alerter import DifferentThreadAlert
 from configure_logger import LogManager
@@ -461,14 +461,10 @@ def get_post_alert_sender(logger, tunnel_manager_id, params):
 def get_smtp_alert_sender(logger, tunnel_manager_id, params):
     if params.get("smtp_hostname"):
         try:
-            oauth = None
-            if params.get("smtp_oauth_client_id"):
-                oauth = {
-                    "token_url": params["smtp_oauth_token_url"],
-                    "client_id": params["smtp_oauth_client_id"],
-                    "client_secret": params["smtp_oauth_client_secret"],
-                    "scope": params["smtp_oauth_scope"],
-                }
+            # Any smtp_oauth_* key turns OAuth on; the sender then refuses an incomplete set.
+            oauth = {key: params.get("smtp_oauth_" + key) for key in OAUTH_KEYS}
+            if not any(oauth.values()):
+                oauth = None
             smtp_sender = EmailAlertSender(tunnel_manager_id, params['smtp_hostname'], params.get('smtp_login', None),
                                            params.get('smtp_password', None),
                                            params['smtp_to'], logger,

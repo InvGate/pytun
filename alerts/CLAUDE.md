@@ -13,10 +13,13 @@ SMTP alerting. Supports `smtp_security`: `"none"`, `"tls"`, `"ssl"`.
 
 **Auth**: none, password (`server.login`), or OAuth2 when `smtp_oauth_*` is set: `fetch_oauth_token()` runs the
 client credentials grant on every send (no cache, sends are rate limited) and authenticates with SASL XOAUTH2 as
-`smtp_login`. OAuth refuses `security=none`. Setup guide: `docs/smtp_oauth.md`.
+`smtp_login`. Any `smtp_oauth_*` key turns OAuth on; the constructor then refuses an incomplete set, an `http`
+token URL, a non-ASCII login and `security=none`. Token failures raise `OAuthTokenError`, whose message keeps only
+the RFC 6749 `error`/`error_description` and never the raw body (a wrong URL can echo the client secret back).
+Setup guide: `docs/smtp_oauth.textile` (Textile, for Redmine).
 
 **TLS verification**: smtplib's own default context does **not** verify the server certificate, so every tls/ssl
-connection passes `ssl.create_default_context()`. `smtp_tls_verify = False` falls back to smtplib's default (for
+connection passes `ssl.create_default_context()`, built per send so a CA installed after startup needs no restart. `smtp_tls_verify = False` falls back to smtplib's default (for
 self-signed servers) and logs a warning at startup; a `SSLCertVerificationError` logs how to fix it.
 
 The constructor log names the auth method, never the password or client secret.

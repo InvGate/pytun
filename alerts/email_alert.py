@@ -2,6 +2,7 @@ import enum
 import smtplib
 import ssl
 from email.mime.text import MIMEText
+from urllib.parse import urlsplit
 
 import requests
 from email_validator import validate_email
@@ -19,23 +20,48 @@ class SecurityValues(enum.Enum):
     ssl = "ssl"
 
 
+OAUTH_KEYS = ("token_url", "client_id", "client_secret", "scope")
+
+
+class OAuthTokenError(Exception):
+    """The OAuth token request failed. The message says why, and never carries the client secret."""
+
+
 def fetch_oauth_token(token_url, client_id, client_secret, scope):
     """OAuth2 client credentials grant (RFC 6749 section 4.4).
 
     No token cache: alerts are rate limited per tunnel, so a fresh token per
     email costs one extra HTTPS request at most every few minutes.
     """
-    response = requests.post(token_url, data={
-        "grant_type": "client_credentials",
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "scope": scope,
-    }, timeout=SMTP_CONNECTION_TIMEOUT)
-    if not response.ok:
-        # The body carries the provider's reason (e.g. Entra's AADSTS code), never the secret.
-        raise requests.HTTPError("OAuth token request failed (%s): %s" % (response.status_code, response.text),
-                                 response=response)
-    return response.json()["access_token"]
+    try:
+        response = requests.post(token_url, data={
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scope": scope,
+        }, timeout=SMTP_CONNECTION_TIMEOUT)
+    except requests.exceptions.SSLError as e:
+        raise OAuthTokenError(
+            "OAuth token request failed, the token endpoint certificate is not trusted: %s. This request uses the "
+            "CA bundle shipped with the Connector, not the system store, and smtp_tls_verify does not apply to it: "
+            "exclude the token URL from TLS inspection" % (e,)) from e
+    except requests.RequestException as e:
+        raise OAuthTokenError("OAuth token request failed: %s" % (e,)) from e
+
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        body = {}
+    if response.ok and body.get("access_token"):
+        return body["access_token"]
+    if "error" in body:  # RFC 6749 section 5.2; Entra puts its AADSTS code in error_description
+        reason = "%s: %s" % (body["error"], body.get("error_description", ""))
+    else:
+        # Never the raw body: a wrong URL can echo the request back, client_secret included.
+        reason = "no access_token in the response (Content-Type: %s)" % (response.headers.get("Content-Type"),)
+    raise OAuthTokenError("OAuth token request failed (%s): %s" % (response.status_code, reason))
 
 
 class EmailAlertSender(AlertSender):
@@ -60,8 +86,15 @@ class EmailAlertSender(AlertSender):
             security = SecurityValues.none
 
         if oauth:
+            missing = ["smtp_oauth_" + key for key in OAUTH_KEYS if not oauth.get(key)]
+            if missing:
+                raise ValueError("OAuth needs all four smtp_oauth_* keys, missing: %s" % ", ".join(missing))
+            if urlsplit(oauth["token_url"]).scheme != "https":
+                raise ValueError("smtp_oauth_token_url must use https: the client secret is sent to it")
             if not login:
                 raise ValueError("smtp_login is required with OAuth: it is the mailbox the alerts are sent as")
+            if not login.isascii():
+                raise ValueError("smtp_login must be ASCII with OAuth: smtplib sends the XOAUTH2 string as ASCII")
             if security == SecurityValues.none:
                 raise ValueError("OAuth requires smtp_security tls or ssl: the access token must not travel "
                                  "in clear text")
@@ -86,8 +119,11 @@ class EmailAlertSender(AlertSender):
         try:
             message = self._build_message(tunnel_name, message)
             token = fetch_oauth_token(**self.oauth) if self.oauth else None
-            # None is smtplib's own default, which does not verify the server certificate.
-            context = ssl.create_default_context() if self.tls_verify else None
+            # None is smtplib's own default, which does not verify the server certificate. Built per send, not
+            # cached, so a CA installed after startup (the fix for an untrusted certificate) needs no restart.
+            context = None
+            if self.tls_verify and self.security != SecurityValues.none:
+                context = ssl.create_default_context()
 
             if self.security == SecurityValues.ssl:
                 server = smtplib.SMTP_SSL(self.host, self.port, timeout=SMTP_CONNECTION_TIMEOUT, context=context)
@@ -112,8 +148,9 @@ class EmailAlertSender(AlertSender):
         except Exception as e:
             self.logger.exception("Failed to send email %s" % (e,))
             if isinstance(e, ssl.SSLCertVerificationError):
-                self.logger.error("The SMTP server certificate is not trusted: install its CA in the system "
-                                  "certificate store, or set smtp_tls_verify = False (not recommended)")
+                self.logger.error("The SMTP server certificate is not trusted (SMTP connection, not the OAuth token "
+                                  "request): install its CA in the system certificate store, or set "
+                                  "smtp_tls_verify = False (not recommended)")
             if exception_on_failure:
                 raise e
 
