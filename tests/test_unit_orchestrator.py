@@ -216,6 +216,23 @@ class TestRestartTunnels:
         pytun.restart_tunnels(files, logger, processes, [0], [], status)
         assert status.to_dict()["status_data"]["a.ini"]["started_times"] == 2
 
+    def test_restarted_process_keeps_counting_into_the_same_metrics(self, monkeypatch, logger):
+        monkeypatch.setattr(pytun, "TunnelProcess", FakeTunnelProcess)
+        files = ["a.ini"]
+        processes = {}
+        status = pytun.Status(mac_address="00:11:22:33:44:55")
+        pytun.start_tunnels(files, logger, processes, [], status)
+        first_metrics = processes[0].metrics
+        first_metrics.add("connections", 5)
+
+        pytun.restart_tunnels(files, logger, processes, [0], [], status)
+
+        assert processes[0].metrics is first_metrics
+        [(config_file, tunnel_name, values)] = status.tunnel_metrics()
+        assert (config_file, tunnel_name) == ("a.ini", "tunnel-a.ini")
+        assert values["connections"] == 5
+        assert values["restarts"] == 1
+
     def test_no_backoff_or_restart_limit_currently_enforced(self, monkeypatch, logger):
         """Documents current behaviour: restart_tunnels() has no backoff and
         no restart-count limit -- it always restarts unconditionally.
@@ -519,3 +536,61 @@ class TestMainOrchestrationLoop:
         assert len(FakeTunnelProcess.instances) == 2
         assert FakeTunnelProcess.instances[0].terminated is True
         assert FakeTunnelProcess.instances[1].started is True
+
+    def test_metrics_endpoint_reports_the_restart(self, monkeypatch, tmp_path):
+        import urllib.request
+        from prometheus_client.parser import text_string_to_metric_families
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        (tmp_path / "connector.ini").write_text(
+            "[pytun]\ntunnel_manager_id=test-manager\nmetrics_port=%d\n" % port)
+        (tmp_path / "configs").mkdir()
+        (tmp_path / "configs" / "t1.ini").write_text("[tunnel]\n")
+
+        monkeypatch.setattr(pytun, "get_application_path", lambda: str(tmp_path))
+        monkeypatch.setattr(pytun.sys, "argv", ["pytun.py"])
+        monkeypatch.setattr(pytun.Device, "is_authorized", lambda self: True)
+        monkeypatch.setattr(pytun, "TunnelProcess", FakeTunnelProcess)
+        monkeypatch.setattr(pytun, "inspection_http_server", lambda *a, **kw: type(
+            "FakeHTTPServer", (), {"serve_forever": lambda self: None})())
+
+        real_check_tunnels = pytun.check_tunnels
+
+        def killing_check_tunnels(files, items, *args):
+            for _, proc in items:
+                proc._alive, proc.exitcode = False, 1
+            return real_check_tunnels(files, items, *args)
+
+        monkeypatch.setattr(pytun, "check_tunnels", killing_check_tunnels)
+
+        servers = []
+        real_start_metrics_server = pytun.start_metrics_server
+
+        def recording_start_metrics_server(*args, **kwargs):
+            servers.append(real_start_metrics_server(*args, **kwargs))
+            return servers[-1]
+
+        monkeypatch.setattr(pytun, "start_metrics_server", recording_start_metrics_server)
+
+        scraped = {}
+
+        def scrape_then_stop(seconds):
+            with urllib.request.urlopen("http://127.0.0.1:%d/metrics" % port, timeout=5) as response:
+                scraped["text"] = response.read().decode()
+            raise BreakMainLoop()
+
+        monkeypatch.setattr(pytun.time, "sleep", scrape_then_stop)
+
+        try:
+            with pytest.raises(BreakMainLoop):
+                pytun.main()
+        finally:
+            for server in servers:
+                server.shutdown()
+                server.server_close()
+
+        restarts = [s for f in text_string_to_metric_families(scraped["text"]) for s in f.samples
+                    if s.name == "connector_tunnel_restarts_total"]
+        assert [(s.labels["config"], s.value) for s in restarts] == [("t1", 1)]

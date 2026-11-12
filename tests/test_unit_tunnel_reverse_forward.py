@@ -201,6 +201,38 @@ class TestReverseForwardTunnelBranches:
         assert transport.forwarded == [("", 1234)]
         tunnel.timer.cancel()
 
+    def test_tunnel_is_up_while_forwarding_and_down_after(self, logger, monkeypatch):
+        transport = _FakeTransport()
+        tunnel = Tunnel(
+            "fake-tunnel",
+            recipient_host="127.0.0.1",
+            recipient_port=0,
+            client=_FakeClient(transport),
+            port_to_forward=1234,
+            logger=logger,
+        )
+        import tunnel_infra.Tunnel as tunnel_module
+
+        real_timer = threading.Timer
+        monkeypatch.setattr(
+            tunnel_module.threading, "Timer", lambda *a, **k: real_timer(9999, lambda: None)
+        )
+
+        up_while_accepting = []
+
+        def _accept(timeout=None):
+            up_while_accepting.append(tunnel.metrics.snapshot()["up"])
+            tunnel.failed = True  # keepalive detected the tunnel is gone
+            return None
+
+        transport.accept = _accept
+
+        tunnel.reverse_forward_tunnel()
+
+        assert up_while_accepting == [1]
+        assert tunnel.metrics.snapshot()["up"] == 0
+        tunnel.timer.cancel()
+
     def test_exception_during_forwarding_is_logged_and_swallowed(self, logger):
         class _RaisingTransport(_FakeTransport):
             def request_port_forward(self, address, port):

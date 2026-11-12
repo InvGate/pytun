@@ -30,6 +30,8 @@ SSH reverse port forwarding implementation. Runs inside a `TunnelProcess`.
 | `reverse_forward_tunnel()` | 127-150 | Main forwarding loop — calls `transport.request_port_forward()` |
 | `stop()` | 152-164 | Graceful shutdown |
 
+**Metrics**: `handler()` counts connections, connection errors and bytes per direction into `self.metrics` (`observation.metrics.TunnelMetrics`, shared memory with the main process); `reverse_forward_tunnel()` sets `up=1` after the port forward and `up=0` in its `finally`.
+
 **Known issue**: `select()` at line 82 has no timeout — can block indefinitely if both ends go silent without closing:
 ```python
 r, w, x = select.select([sock, chan], [], [])  # TODO: add timeout=60

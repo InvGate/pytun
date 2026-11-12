@@ -12,6 +12,7 @@ from alerts.alert_sender import AlertSender
 from configure_logger import LogManager
 from os.path import isabs, dirname, realpath, join
 
+from observation.metrics import TunnelMetrics
 from tunnel_infra.Tunnel import Tunnel
 
 DEFAULT_KEEP_ALIVE_TIME = 30
@@ -79,6 +80,8 @@ class TunnelProcess(multiprocessing.Process):
         )
 
         self.tunnel: Tunnel | None = None
+        # pytun.py swaps in the tunnel's shared instance from Status before start()
+        self.metrics = TunnelMetrics()
 
         super().__init__()
 
@@ -101,6 +104,7 @@ class TunnelProcess(multiprocessing.Process):
 
     def run(self):
         self.logger.info("Starting TunnelProcess with the process id: %s", self.pid)
+        self.metrics.set("up", 0)  # a predecessor killed hard never cleared it
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         client = self.ssh_connect()
@@ -117,7 +121,8 @@ class TunnelProcess(multiprocessing.Process):
                 client=client,
                 logger=self.logger,
                 keep_alive_time=self.keep_alive_time,
-                alert_senders=self.alert_senders
+                alert_senders=self.alert_senders,
+                metrics=self.metrics
             )
             self.tunnel = tunnel
             tunnel.reverse_forward_tunnel()

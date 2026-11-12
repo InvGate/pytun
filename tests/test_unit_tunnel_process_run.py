@@ -7,6 +7,7 @@ we can patch ssh_connect()/Tunnel and observe sys.exit codes and cleanup
 without needing a real subprocess or a real SSH server.
 """
 import logging
+import sys
 
 import pytest
 
@@ -105,6 +106,40 @@ class TestRun:
         assert created["tunnel"].forwarded is True
         assert created["tunnel"].stopped is True
         assert fake_client.closed is True
+
+    def test_tunnel_counts_into_the_process_shared_metrics(self, tmp_path, monkeypatch):
+        """Otherwise the main process (and /metrics) would never see the counts."""
+        process = _make_process(tmp_path)
+        monkeypatch.setattr(process, "ssh_connect", lambda: _FakeClient())
+
+        received = {}
+
+        def _fake_tunnel_ctor(*args, **kwargs):
+            received.update(kwargs)
+            return _FakeTunnel(*args, **kwargs)
+
+        import tunnel_infra.TunnelProcess as tp_module
+        monkeypatch.setattr(tp_module, "Tunnel", _fake_tunnel_ctor)
+
+        with pytest.raises(SystemExit):
+            process.run()
+
+        assert received["metrics"] is process.metrics
+
+    def test_tunnel_is_reported_down_until_it_reconnects(self, tmp_path, monkeypatch):
+        """A process killed hard never clears its up flag; the next one must."""
+        process = _make_process(tmp_path)
+        process.metrics.set("up", 1)
+
+        def _ssh_connect_fails():
+            sys.exit(1)  # what ssh_connect() does when the server is unreachable
+
+        monkeypatch.setattr(process, "ssh_connect", _ssh_connect_fails)
+
+        with pytest.raises(SystemExit):
+            process.run()
+
+        assert process.metrics.snapshot()["up"] == 0
 
     def test_keyboard_interrupt_returns_exit_code_zero(self, tmp_path, monkeypatch):
         process = _make_process(tmp_path)

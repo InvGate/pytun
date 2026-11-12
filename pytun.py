@@ -25,6 +25,7 @@ from alerts.pooled_alerter import DifferentThreadAlert
 from configure_logger import LogManager
 from device import Device
 from observation.http_server import inspection_http_server
+from observation.metrics import start_metrics_server
 from observation.status import Status
 from tunnel_infra.TunnelProcess import TunnelProcess
 from tunnel_infra.pathtype import PathType
@@ -179,6 +180,8 @@ def main():
     http_inspection_thread = threading.Thread(target=lambda: http_inspection.serve_forever())
     http_inspection_thread.daemon = True
     http_inspection_thread.start()
+
+    start_metrics_server(params, status, tunnel_manager_id, __version__, logger)
 
     while True:
         items = list(processes.items())
@@ -403,8 +406,8 @@ def restart_tunnels(files, logger, processes, to_restart, alert_senders, status)
         logger.info("Going to restart connector from file %s", files[each])
         tunnel_process = TunnelProcess.from_config_file(files[each], alert_senders)
         processes[each] = tunnel_process
+        tunnel_process.metrics = status.start_tunnel(files[each], tunnel_process.tunnel_name)
         tunnel_process.start()
-        status.start_tunnel(files[each])
         logger.info("Connector %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
 
 
@@ -426,8 +429,8 @@ def register_signal_handlers(processes, pool):
 def start_tunnels(files, logger, processes, alert_senders, status):
     create_tunnels_from_config(alert_senders, files, logger, processes)
     for key, tunnel_process in processes.items():
+        tunnel_process.metrics = status.start_tunnel(files[key], tunnel_process.tunnel_name)
         tunnel_process.start()
-        status.start_tunnel(files[key])
         logger.info("Connector %s has pid %s", tunnel_process.tunnel_name, tunnel_process.pid)
 
 

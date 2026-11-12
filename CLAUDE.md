@@ -54,7 +54,7 @@
 ### Subdirectories
 - `tunnel_infra/` — SSH tunnel implementation → see [tunnel_infra/CLAUDE.md](tunnel_infra/CLAUDE.md)
 - `alerts/` — Email + HTTP POST alerting → see [alerts/CLAUDE.md](alerts/CLAUDE.md)
-- `observation/` — HTTP inspection server + status tracking → see [observation/CLAUDE.md](observation/CLAUDE.md)
+- `observation/` — HTTP inspection server, status tracking, Prometheus `/metrics` → see [observation/CLAUDE.md](observation/CLAUDE.md)
 - `lib/` — `ratelimit.py`: per-argument rate limiting decorator used by email alerts
 
 ### Configuration Files
@@ -68,6 +68,9 @@ log_level=DEBUG|INFO|WARNING
 log_path=./logs
 inspection_port=9999
 inspection_localhost_only=True    # KEEP TRUE - security critical
+
+# Optional Prometheus metrics (own listener, only /metrics; disabled unless metrics_port is set)
+metrics_port=  metrics_host=127.0.0.1  metrics_prefix=connector_
 
 # Optional SMTP
 smtp_hostname=  smtp_port=587  smtp_security=tls|ssl|none
@@ -216,6 +219,7 @@ tail -f logs/main_connector.log     # Main process log
 curl http://localhost:9999/status   # Tunnel status, restart counts, service health
 curl http://localhost:9999/configs  # ⚠️ ZIP with SSH keys — localhost only!
 curl http://localhost:9999/logs     # ZIP with all log files
+curl http://localhost:9998/metrics  # Prometheus metrics, only if metrics_port=9998
 ```
 
 ---

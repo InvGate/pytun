@@ -77,6 +77,11 @@ log_path=./logs                       # Log directory
 inspection_port=9999                  # Status API port
 inspection_localhost_only=True        # Security: localhost only (recommended)
 
+# Optional: Prometheus metrics (separate listener, only serves /metrics)
+metrics_port=9998                     # Enables /metrics; unset = disabled
+metrics_host=127.0.0.1                # 0.0.0.0 if Prometheus runs on another machine
+metrics_prefix=connector_             # Prefix for every metric name
+
 # Optional: Email Alerts (SMTP)
 smtp_hostname=smtp.example.com        # SMTP server
 smtp_port=587                         # SMTP port
@@ -188,6 +193,12 @@ curl http://localhost:9999/status          # Tunnel status + service health
 curl http://localhost:9999/configs -o configs.zip   # Download configs
 curl http://localhost:9999/logs -o logs.zip         # Download logs
 ```
+
+### Prometheus / OpenTelemetry metrics
+
+Set `metrics_port` in `connector.ini` to serve per-tunnel metrics (state, restarts, connections, errors,
+bytes) on `/metrics` in the Prometheus format, also read by the OpenTelemetry Collector. See
+[METRICS.md](METRICS.md) for the setup, the metric reference and ready-made alerting rules.
 
 **Health Check Response Example**:
 ```json

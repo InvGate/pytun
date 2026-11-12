@@ -15,6 +15,14 @@ log_path = ./logs
 inspection_port = 9999
 inspection_localhost_only = True
 
+# --- Optional: Prometheus metrics (/metrics, also read by the OpenTelemetry Collector) ---
+# Separate listener that serves only /metrics; disabled unless metrics_port is set.
+# Use metrics_host = 0.0.0.0 when Prometheus runs on another machine (and allow the port
+# in the Windows firewall).
+# metrics_port   = 9998
+# metrics_host   = 127.0.0.1
+# metrics_prefix = connector_
+
 # MAC address signature (provided by InvGate backend — do not edit manually)
 # signature = <base64-encoded signature>
 

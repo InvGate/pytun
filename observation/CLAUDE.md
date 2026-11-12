@@ -19,12 +19,20 @@
 
 **Known issue**: HTTP thread restart logic (`pytun.py:188-192`) creates a new thread but may not stop the old `HTTPServer` object before doing so.
 
-### status.py (39 lines)
+### metrics.py
+Opt-in Prometheus `/metrics` on its **own** `ThreadingHTTPServer` (`metrics_port`, `metrics_host` default `127.0.0.1`, `metrics_prefix` default `connector_`). It serves only `/metrics` (everything else 404), so it may face the network without exposing `/configs`. Bad settings (prefix, port, host) are logged and disable metrics — they never stop the tunnels.
+
+User guide: [METRICS.md](../METRICS.md).
+
+- `TunnelMetrics`: `multiprocessing.Array` of `up`, `connections`, `connection_errors`, `bytes_received`, `bytes_sent`. Created once per tunnel by `Status.start_tunnel()` in the main process and assigned to every (re)started `TunnelProcess`, so counters survive tunnel restarts. Written by `Tunnel` (handler threads, keepalive) and reset to `up=0` at the top of `TunnelProcess.run()`.
+- `render_metrics()`: text format 0.0.4, labels `config` (ini file stem, unique) and `tunnel` (`tunnel_name`). Tests parse it with `prometheus_client` (dev-only dependency).
+
+### status.py
 Thread-safe tunnel status store. Uses `RLock` for concurrent reads/writes.
 
-Tracks per tunnel: restart count, last start time. Also stores MAC address.
+Tracks per tunnel: restart count, last start time, shared `TunnelMetrics`. Also stores MAC address.
 
-Key methods: `start_tunnel(name)`, `to_dict()` (used by `/status` endpoint).
+Key methods: `start_tunnel(config_file, tunnel_name)` (returns the tunnel's `TunnelMetrics`; call it **before** `start()`), `tunnel_metrics()` (used by `/metrics`), `to_dict()` (used by `/status`).
 
 ### connection_check.py (33 lines)
 Tests TCP connectivity to `remote_host:remote_port` with a 5-second timeout. Used by the `/status` endpoint to report live service health. Runs checks concurrently via `ThreadPoolExecutor(4)`.

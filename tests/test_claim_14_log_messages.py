@@ -130,6 +130,7 @@ def test_forwarding_failure_message_reports_the_local_service_target(caplog):
 
     Emitted for real by pointing the forwarder at a closed port.
     """
+    from observation.metrics import TunnelMetrics
     from tunnel_infra.Tunnel import Tunnel
 
     logger = logging.getLogger("claim14-forward")
@@ -137,6 +138,7 @@ def test_forwarding_failure_message_reports_the_local_service_target(caplog):
     tunnel.logger = logger
     tunnel.alert_senders = None
     tunnel.name = "t"
+    tunnel.metrics = TunnelMetrics()
 
     with caplog.at_level(logging.ERROR, logger="claim14-forward"):
         # Port 1 on loopback is closed; connect() fails and the message fires.

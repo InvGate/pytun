@@ -132,6 +132,44 @@ class TestHandlerRelay:
         thread.join(timeout=5)
         assert not thread.is_alive()
 
+    def test_counts_the_connection_and_bytes_per_direction(self, logger):
+        """bytes_received is what the cloud sent us, bytes_sent what the local service answered."""
+        service = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        service.bind(("127.0.0.1", 0))
+        service.listen(1)
+        service.settimeout(5)
+
+        def _reply_once():
+            conn, _ = service.accept()
+            with conn:
+                conn.recv(1024)
+                conn.sendall(b"pong!!")
+
+        server_thread = threading.Thread(target=_reply_once, daemon=True)
+        server_thread.start()
+
+        tunnel = _make_tunnel(logger)
+        chan_sock, remote_sock = socket.socketpair()
+        remote_sock.settimeout(5)
+        thread = threading.Thread(
+            target=tunnel.handler,
+            args=(_FakeChannel(chan_sock), "127.0.0.1", service.getsockname()[1]),
+            daemon=True,
+        )
+        thread.start()
+
+        remote_sock.sendall(b"ping")
+        assert remote_sock.recv(1024) == b"pong!!"
+        thread.join(timeout=5)
+        server_thread.join(timeout=5)
+        service.close()
+        remote_sock.close()
+
+        snapshot = tunnel.metrics.snapshot()
+        assert snapshot["connections"] == 1
+        assert snapshot["bytes_received"] == 4
+        assert snapshot["bytes_sent"] == 6
+
     def test_connect_failure_alerts_registered_senders_and_returns(self, logger):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
             probe.bind(("127.0.0.1", 0))
@@ -153,6 +191,21 @@ class TestHandlerRelay:
         assert len(sent) == 1
         assert sent[0][0] == "test-tunnel"
         assert "127.0.0.1" in sent[0][1]
+        remote_sock.close()
+
+    def test_connect_failure_counts_a_connection_error(self, logger):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", 0))
+            unreachable_port = probe.getsockname()[1]
+
+        tunnel = _make_tunnel(logger)
+        chan_sock, remote_sock = socket.socketpair()
+
+        tunnel.handler(_FakeChannel(chan_sock), "127.0.0.1", unreachable_port)
+
+        snapshot = tunnel.metrics.snapshot()
+        assert snapshot["connection_errors"] == 1
+        assert snapshot["connections"] == 0
         remote_sock.close()
 
     def test_connect_failure_without_alert_senders_does_not_raise(self, logger):

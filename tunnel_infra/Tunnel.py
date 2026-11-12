@@ -8,6 +8,7 @@ import paramiko
 from paramiko.client import SSHClient
 
 from alerts.alert_sender import AlertSender
+from observation.metrics import TunnelMetrics
 
 
 class Tunnel:
@@ -21,7 +22,8 @@ class Tunnel:
         port_to_forward: int,
         logger: logging.Logger,
         keep_alive_time: int = 30,
-        alert_senders: list[AlertSender] | None = None
+        alert_senders: list[AlertSender] | None = None,
+        metrics: TunnelMetrics | None = None
     ):
         """
         Create an SSH tunnel by asking the ``client`` to forward the data that it receives in the
@@ -41,6 +43,7 @@ class Tunnel:
         self.logger = logger
         self.keep_alive_time = keep_alive_time
         self.alert_senders = alert_senders
+        self.metrics = metrics if metrics is not None else TunnelMetrics()
 
         self.transport: paramiko.transport.Transport | None = None
         self.timer: threading.Timer | None = None
@@ -56,6 +59,7 @@ class Tunnel:
                 sock.settimeout(2)
                 sock.connect((host, port))
             except Exception as e:
+                self.metrics.add("connection_errors")
                 self.logger.exception(
                     "Forwarding request to %s:%d failed: %r" % (host, port, e)
                 )
@@ -71,6 +75,7 @@ class Tunnel:
                             self.logger.exception("Failed to send alert: %r", e)
                 return
 
+            self.metrics.add("connections")
             self.logger.debug(
                 "Connected!  Connector open %r -> %r -> %r",
                 chan.origin_addr,
@@ -84,11 +89,13 @@ class Tunnel:
                         data = sock.recv(1024)
                         if len(data) == 0:
                             break
+                        self.metrics.add("bytes_sent", len(data))
                         chan.send(data)
                     if chan in r:
                         data = chan.recv(1024)
                         if len(data) == 0:
                             break
+                        self.metrics.add("bytes_received", len(data))
                         sock.send(data)
                 chan.close()
                 self.logger.debug("Connector closed from %r", chan.origin_addr)
@@ -131,6 +138,7 @@ class Tunnel:
 
             # ask client to forward the data that it receives in the `port_to_forward` through this SSH session
             self.transport.request_port_forward("", self.port_to_forward)
+            self.metrics.set("up", 1)
 
             self.timer = threading.Timer(30, self.validate_tunnel_up)
             self.timer.start()
@@ -148,6 +156,8 @@ class Tunnel:
                 thr.start()
         except Exception as e:
             self.logger.exception("Failed to forward")
+        finally:
+            self.metrics.set("up", 0)
 
     def stop(self):
         if self.timer:
