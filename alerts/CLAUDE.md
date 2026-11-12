@@ -8,8 +8,18 @@ Abstract base class. All alert implementations must implement:
 send_alert(tunnel_name, message=None, exception_on_failure=False)
 ```
 
-### email_alert.py (83 lines)
+### email_alert.py
 SMTP alerting. Supports `smtp_security`: `"none"`, `"tls"`, `"ssl"`.
+
+**Auth**: none, password (`server.login`), or OAuth2 when `smtp_oauth_*` is set: `fetch_oauth_token()` runs the
+client credentials grant on every send (no cache, sends are rate limited) and authenticates with SASL XOAUTH2 as
+`smtp_login`. OAuth refuses `security=none`. Setup guide: `docs/smtp_oauth.md`.
+
+**TLS verification**: smtplib's own default context does **not** verify the server certificate, so every tls/ssl
+connection passes `ssl.create_default_context()`. `smtp_tls_verify = False` falls back to smtplib's default (for
+self-signed servers) and logs a warning at startup; a `SSLCertVerificationError` logs how to fix it.
+
+The constructor log names the auth method, never the password or client secret.
 
 **Rate limiting**: `@ratelimit_by_args(calls=1, period=600)` — each unique `tunnel_name` gets its own independent 10-minute window (from `lib/ratelimit.py`). If 10 tunnels fail simultaneously, 10 separate emails are sent — this is intentional per-tunnel behavior.
 

@@ -461,13 +461,25 @@ def get_post_alert_sender(logger, tunnel_manager_id, params):
 def get_smtp_alert_sender(logger, tunnel_manager_id, params):
     if params.get("smtp_hostname"):
         try:
+            oauth = None
+            if params.get("smtp_oauth_client_id"):
+                oauth = {
+                    "token_url": params["smtp_oauth_token_url"],
+                    "client_id": params["smtp_oauth_client_id"],
+                    "client_secret": params["smtp_oauth_client_secret"],
+                    "scope": params["smtp_oauth_scope"],
+                }
             smtp_sender = EmailAlertSender(tunnel_manager_id, params['smtp_hostname'], params.get('smtp_login', None),
                                            params.get('smtp_password', None),
                                            params['smtp_to'], logger,
                                            port=params.getint('smtp_port', 25), from_address=params.get('smtp_from'),
-                                           security=params.get("smtp_security"))
+                                           security=params.get("smtp_security"), oauth=oauth,
+                                           tls_verify=params.getboolean("smtp_tls_verify", True))
         except KeyError as e:
             logger.exception("Missing smtp param %s" % e)
+            sys.exit(-1)
+        except ValueError as e:
+            logger.error("Invalid smtp config: %s", e)
             sys.exit(-1)
     else:
         smtp_sender = None
