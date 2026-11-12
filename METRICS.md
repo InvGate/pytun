@@ -13,6 +13,7 @@ exactly as before.
 
 - [Enabling metrics](#enabling-metrics)
 - [Exposing metrics to another machine](#exposing-metrics-to-another-machine)
+- [Metrics on the inspection server](#metrics-on-the-inspection-server)
 - [Metrics reference](#metrics-reference)
 - [How the values behave](#how-the-values-behave)
 - [Collecting with Prometheus](#collecting-with-prometheus)
@@ -23,7 +24,7 @@ exactly as before.
 
 ## Enabling metrics
 
-Metrics are **off by default**. Add `metrics_port` to the `[pytun]` section of
+The metrics listener is **off by default**. Add `metrics_port` to the `[pytun]` section of
 `connector.ini` and restart the connector service:
 
 ```ini
@@ -77,6 +78,18 @@ The endpoint has no authentication and no TLS. What it reveals: tunnel names, co
 the `tunnel_manager_id`, the connector version and traffic counters. It contains no credentials,
 keys or hostnames of your services. If that is still too much for your network, keep the default
 `127.0.0.1` and run the collector on the connector machine.
+
+## Metrics on the inspection server
+
+The inspection server also serves the same metrics at `http://127.0.0.1:9999/metrics`
+(`inspection_port`). It needs no setting and is always on.
+
+- It always uses the `connector_` prefix and ignores `metrics_prefix`, so InvGate tooling sees the
+  same metric names on every connector.
+- It follows `inspection_localhost_only` like the rest of that server. Do not open port 9999 to
+  scrape it: it also serves `/configs`. Use `metrics_port` to reach metrics from other machines.
+- Only the exact path `/metrics` is served there. `/metrics?x=1` or `/metrics/` get the regular
+  health-check answer, like any other unknown path on that server.
 
 ## Metrics reference
 

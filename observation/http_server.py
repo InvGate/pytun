@@ -8,6 +8,7 @@ from http import HTTPStatus
 from os.path import realpath
 
 from observation.connection_check import ConnectionCheck
+from observation.metrics import DEFAULT_PREFIX, render_metrics, send_metrics
 
 try:
     from http.server import ThreadingHTTPServer as HttpServer
@@ -91,6 +92,10 @@ class RequestHandlerClassFactory:
                         res = self.handle_status()
                     elif self.path == '/logs':
                         return self.handle_logs()
+                    elif self.path == '/metrics':
+                        # Fixed prefix: InvGate scrapes every connector with the same names.
+                        return send_metrics(self, render_metrics(status, DEFAULT_PREFIX, tunnel_manager_id,
+                                                                 version_string))
                     else:
                         res = self.handle_ping()
                     res['tunnel_manager_id'] = tunnel_manager_id

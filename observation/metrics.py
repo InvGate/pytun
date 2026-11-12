@@ -13,6 +13,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 FIELDS = ("up", "connections", "connection_errors", "bytes_received", "bytes_sent")
+DEFAULT_PREFIX = "connector_"
 
 # (metric name, type, help, value key in Status.tunnel_metrics())
 _TUNNEL_METRICS = (
@@ -73,18 +74,23 @@ def render_metrics(status, prefix, tunnel_manager_id, version):
     return "\n".join(lines) + "\n"
 
 
+def send_metrics(handler, text):
+    """Write a Prometheus scrape response on a BaseHTTPRequestHandler."""
+    body = text.encode("utf-8")
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
 def metrics_http_server(address, render):
     class MetricsHandler(BaseHTTPRequestHandler):
         def do_GET(self):
             if self.path.partition("?")[0] != "/metrics":
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
-            body = render().encode("utf-8")
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            send_metrics(self, render())
 
         def log_message(self, format, *args):
             pass  # a scrape every few seconds would flood stderr
@@ -100,7 +106,7 @@ def start_metrics_server(params, status, tunnel_manager_id, version, logger):
     port = params.get("metrics_port")
     if not port:
         return None
-    prefix = params.get("metrics_prefix", "connector_")
+    prefix = params.get("metrics_prefix", DEFAULT_PREFIX)
     if not _METRIC_PREFIX.fullmatch(prefix):
         logger.error("Invalid metrics_prefix %r: metrics disabled", prefix)
         return None

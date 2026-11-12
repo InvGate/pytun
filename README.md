@@ -192,6 +192,7 @@ curl http://localhost:9999/                # Health check
 curl http://localhost:9999/status          # Tunnel status + service health
 curl http://localhost:9999/configs -o configs.zip   # Download configs
 curl http://localhost:9999/logs -o logs.zip         # Download logs
+curl http://localhost:9999/metrics         # Prometheus metrics (see METRICS.md)
 ```
 
 ### Prometheus / OpenTelemetry metrics

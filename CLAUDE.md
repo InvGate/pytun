@@ -219,7 +219,8 @@ tail -f logs/main_connector.log     # Main process log
 curl http://localhost:9999/status   # Tunnel status, restart counts, service health
 curl http://localhost:9999/configs  # ⚠️ ZIP with SSH keys — localhost only!
 curl http://localhost:9999/logs     # ZIP with all log files
-curl http://localhost:9998/metrics  # Prometheus metrics, only if metrics_port=9998
+curl http://localhost:9999/metrics  # Prometheus metrics, prefix always connector_
+curl http://localhost:9998/metrics  # Same, on its own listener, only if metrics_port=9998
 ```
 
 ---

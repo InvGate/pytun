@@ -273,3 +273,32 @@ class TestInspectionServerBindsRequestedAddress:
                 _stop(httpd, thread)
         finally:
             httpd.server_close()
+
+
+class TestMetricsRoute:
+    def test_serves_tunnel_metrics_with_the_fixed_prefix(self, tmp_path):
+        """InvGate scrapes this through the connector's tunnel: names must not depend on metrics_prefix."""
+        from prometheus_client.parser import text_string_to_metric_families
+
+        status = Status("00:11:22:33:44:55")
+        ldap_ini = str(tmp_path / "configs" / "ldap.ini")
+        status.start_tunnel(ldap_ini, "LDAP")
+        status.start_tunnel(ldap_ini, "LDAP")  # one restart
+
+        httpd = inspection_http_server(
+            str(tmp_path), "tm-id", str(tmp_path), status, "9.9.9", ("127.0.0.1", 0), _logger(),
+        )
+        thread = _start(httpd)
+        try:
+            url = "http://127.0.0.1:%d/metrics" % httpd.server_address[1]
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                content_type = resp.headers["Content-Type"]
+                text = resp.read().decode()
+        finally:
+            _stop(httpd, thread)
+
+        assert content_type.startswith("text/plain")
+        samples = {s.name: s for f in text_string_to_metric_families(text) for s in f.samples}
+        assert samples["connector_tunnel_restarts_total"].value == 1
+        assert samples["connector_tunnel_restarts_total"].labels == {"config": "ldap", "tunnel": "LDAP"}
+        assert samples["connector_info"].labels["tunnel_manager_id"] == "tm-id"

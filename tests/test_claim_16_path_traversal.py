@@ -1,7 +1,7 @@
 """Claim 16: the CVE-2024-2318 class of path traversal does not apply.
 
 The document asserts three structural properties of the introspection server:
-  a) exactly three fixed routes, matched by literal comparison;
+  a) a fixed set of routes (/status, /logs, /configs, /metrics), matched by literal comparison;
   b) no request parameter is processed at all;
   c) the packaged directories are fixed at startup from the config file and
      cannot be altered by an HTTP request.
@@ -135,8 +135,8 @@ def test_query_parameters_are_not_routes_and_are_ignored(server, path):
     assert b"root:" not in body
 
 
-def test_only_three_routes_are_special_cased(server):
-    """Property (a): /status, /logs, /configs behave specially; others ping."""
+def test_only_fixed_routes_are_special_cased(server):
+    """Property (a): /status, /logs, /configs, /metrics behave specially; others ping."""
     base, _ = server
 
     _, _, status_body = get(base, "/status")
@@ -147,7 +147,11 @@ def test_only_three_routes_are_special_cased(server):
         assert b"application/zip" in head, route
         assert body[:2] == b"PK", route  # a real zip
 
-    for route in ("/", "/admin", "/Status", "/CONFIGS", "/status/"):
+    _, head, body = get(base, "/metrics")
+    assert b"text/plain" in head
+    assert b"connector_info" in body
+
+    for route in ("/", "/admin", "/Status", "/CONFIGS", "/status/", "/metrics/", "/metrics?x=1"):
         _, _, body = get(base, route)
         assert b'"status": "ok"' in body, route
 

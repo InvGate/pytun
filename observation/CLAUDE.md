@@ -12,6 +12,7 @@
 | `GET /status` | Tunnel status, restart counts, MAC address, service connectivity |
 | `GET /configs` | **ZIP of all config files — includes SSH keys and passwords** |
 | `GET /logs` | ZIP of all log files |
+| `GET /metrics` | Prometheus metrics, always prefix `connector_` (ignores `metrics_prefix` so InvGate sees fixed names); see `metrics.py` |
 
 **Security**: `/configs` has no file filtering — it zips everything in the config directory. The only protection is `inspection_localhost_only=True` (default). Never set this to `False` in production.
 
@@ -20,7 +21,7 @@
 **Known issue**: HTTP thread restart logic (`pytun.py:188-192`) creates a new thread but may not stop the old `HTTPServer` object before doing so.
 
 ### metrics.py
-Opt-in Prometheus `/metrics` on its **own** `ThreadingHTTPServer` (`metrics_port`, `metrics_host` default `127.0.0.1`, `metrics_prefix` default `connector_`). It serves only `/metrics` (everything else 404), so it may face the network without exposing `/configs`. Bad settings (prefix, port, host) are logged and disable metrics — they never stop the tunnels.
+Opt-in Prometheus `/metrics` on its **own** `ThreadingHTTPServer` (`metrics_port`, `metrics_host` default `127.0.0.1`, `metrics_prefix` default `connector_`). The same text is also on the inspection server's `/metrics` (fixed `connector_` prefix). The dedicated listener serves only `/metrics` (everything else 404), so it may face the network without exposing `/configs`. Bad settings (prefix, port, host) are logged and disable metrics — they never stop the tunnels.
 
 User guide: [METRICS.md](../METRICS.md).
 
