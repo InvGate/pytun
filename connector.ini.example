@@ -26,6 +26,15 @@ inspection_localhost_only = True
 # smtp_login    = alerts@example.com
 # smtp_password = YOUR_SMTP_PASSWORD
 # smtp_to       = oncall@example.com
+# smtp_tls_verify = True       # False only for a server with a self-signed certificate
+#
+# Microsoft 365 with OAuth2 instead of smtp_password (see docs/smtp_oauth.textile).
+# Requires smtp_security = tls or ssl; smtp_login is the mailbox the alerts are sent as.
+# smtp_hostname = smtp.office365.com
+# smtp_oauth_token_url     = https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token
+# smtp_oauth_client_id     = <application-client-id>
+# smtp_oauth_client_secret = <client-secret-value>
+# smtp_oauth_scope         = https://outlook.office365.com/.default
 
 
 # --- Optional: HTTP POST alerts ---

@@ -1,0 +1,174 @@
+h1. Alertas por email con OAuth2 (Microsoft 365)
+
+{{toc}}
+
+A partir de la versión *1.3.0*, el Connector puede autenticarse contra el SMTP de Microsoft 365 con *OAuth2* en lugar de usuario y contraseña. Esta guía explica cómo configurarlo de punta a punta.
+
+h2. ¿Por qué usar OAuth2?
+
+* *Microsoft está retirando la autenticación básica de SMTP AUTH* en Exchange Online. Según el último aviso (MC786329, enero 2026), queda deshabilitada por defecto desde diciembre 2026 y se elimina definitivamente en 2027. Cuando eso ocurra, una configuración con @smtp_password@ contra @smtp.office365.com@ falla con @550 5.7.30 Basic authentication is not supported for Client Submission@.
+* *La credencial no depende de una persona*: no se rompe cuando alguien cambia su contraseña, ni pide MFA.
+* *Permiso acotado*: la aplicación solo puede enviar mail, y solo desde los buzones a los que se le da permiso de forma explícita.
+* *Se revoca sin tocar cuentas*: basta con borrar el secreto o la aplicación en Entra ID.
+
+*Lo que no cambia*: el _client secret_ se guarda en texto plano en @connector.ini@, igual que hoy la contraseña. Hay que protegerlo con permisos NTFS sobre el archivo. El Connector no lo escribe en los logs.
+
+h2. Cómo funciona
+
+# Cada vez que tiene que mandar una alerta, el Connector pide un _access token_ a Entra ID (@login.microsoftonline.com@) con el flujo _client credentials_: se identifica con el _client ID_ y el _client secret_ de una aplicación registrada en el tenant.
+# Abre la conexión SMTP con @smtp.office365.com:587@, la cifra con STARTTLS *verificando el certificado del servidor*, y se autentica con el mecanismo @XOAUTH2@ presentando el token en nombre del buzón configurado en @smtp_login@.
+# Envía el email. El token vence a la hora y no se guarda: como las alertas tienen rate limit (1 cada 10 minutos por túnel), pedir uno nuevo por email no tiene costo relevante.
+
+h2. Requisitos
+
+* Connector *1.3.0 o superior*.
+* Una cuenta con rol *Application Administrator* (o superior) en Entra ID, para registrar la aplicación y dar el _admin consent_.
+* Una cuenta con rol *Exchange Administrator* y el módulo de PowerShell @ExchangeOnlineManagement@.
+* Un buzón desde el cual salen las alertas (por ejemplo @alertas-connector@contoso.com@). Puede ser un buzón de usuario o uno compartido.
+* Salida desde el servidor del Connector hacia @login.microsoftonline.com:443@ y @smtp.office365.com:587@.
+
+h2. Paso 1: registrar la aplicación en Entra ID
+
+# En el "Entra admin center":https://entra.microsoft.com ir a *Identity → Applications → App registrations → New registration*. Nombre: por ejemplo @InvGate Connector alerts@. Supported account types: *Accounts in this organizational directory only (single tenant)*. Redirect URI: dejar vacío.
+# En la página *Overview* de la aplicación, copiar el *Application (client) ID* (va en @smtp_oauth_client_id@) y el *Directory (tenant) ID* (va dentro de @smtp_oauth_token_url@).
+# Ir a *API permissions → Add a permission → APIs my organization uses*, buscar *Office 365 Exchange Online*, elegir *Application permissions* y marcar *SMTP.SendAsApp*. Confirmar con *Add permissions*.
+# En la misma pantalla, hacer clic en *Grant admin consent for <tenant>*. El permiso tiene que quedar con el estado _Granted_.
+# Ir a *Certificates & secrets → Client secrets → New client secret*. Elegir una expiración (máximo 24 meses) y copiar el campo *Value* → va en @smtp_oauth_client_secret@.
+
+*Importante*: copiar el *Value*, no el _Secret ID_. El Value se muestra una sola vez; si se pierde, hay que generar otro secreto. Anotar la fecha de vencimiento (ver "Mantenimiento":#Mantenimiento).
+
+h2. Paso 2: autorizar la aplicación en Exchange Online
+
+El permiso de Entra ID no alcanza: Exchange necesita conocer la aplicación (_service principal_) y saber desde qué buzón puede enviar.
+
+*2.1. Object ID de la Enterprise Application.* En Entra ir a *Identity → Applications → Enterprise applications*, abrir la aplicación y copiar el *Object ID* de su página Overview.
+
+*Atención*: es el Object ID de *Enterprise applications*, *no* el de _App registrations_. Son distintos, y usar el de App registrations hace que la autenticación falle con @535 5.7.3@.
+
+*2.2. Registrar la aplicación en Exchange y darle permiso sobre el buzón.* En PowerShell:
+
+<pre><code class="powershell">
+Install-Module -Name ExchangeOnlineManagement   # solo si no está instalado
+Connect-ExchangeOnline -Organization <tenant-id>
+
+# Registrar la aplicación en Exchange
+New-ServicePrincipal -AppId <client-id> -ObjectId <enterprise-app-object-id> -DisplayName "InvGate Connector alerts"
+
+# Darle permiso sobre el buzón que envía las alertas
+$sp = Get-ServicePrincipal | Where-Object AppId -eq "<client-id>"
+Add-MailboxPermission -Identity "alertas-connector@contoso.com" -User $sp.Identity -AccessRights FullAccess
+
+# Habilitar SMTP AUTH para ese buzón (pisa la configuración del tenant)
+Set-CASMailbox -Identity "alertas-connector@contoso.com" -SmtpClientAuthenticationDisabled $false
+</code></pre>
+
+*2.3. Verificar.*
+
+<pre><code class="powershell">
+Get-ServicePrincipal | Format-List DisplayName, AppId, Identity
+Get-MailboxPermission -Identity "alertas-connector@contoso.com" | Where-Object User -like "*InvGate*"
+Get-CASMailbox -Identity "alertas-connector@contoso.com" | Format-List SmtpClientAuthenticationDisabled
+</code></pre>
+
+*Si las alertas tienen que salir con otro remitente* (@smtp_from@ distinto de @smtp_login@), además hay que darle a la aplicación permiso _Send As_ sobre esa dirección:
+
+<pre><code class="powershell">
+Add-RecipientPermission -Identity "otro-remitente@contoso.com" -Trustee $sp.Identity -AccessRights SendAs
+</code></pre>
+
+Lo más simple es no configurar @smtp_from@: por defecto el remitente es @smtp_login@.
+
+h2. Paso 3: configurar el Connector
+
+Editar la sección @[pytun]@ de @connector.ini@:
+
+<pre><code class="ini">
+smtp_hostname = smtp.office365.com
+smtp_port     = 587
+smtp_security = tls
+smtp_login    = alertas-connector@contoso.com
+smtp_to       = soporte@contoso.com
+
+smtp_oauth_token_url     = https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token
+smtp_oauth_client_id     = <client-id>
+smtp_oauth_client_secret = <client-secret-value>
+smtp_oauth_scope         = https://outlook.office365.com/.default
+</code></pre>
+
+|_. Parámetro |_. Valor |
+| @smtp_login@ | El buzón del Paso 2. Es la identidad con la que se envía; es obligatorio con OAuth. |
+| @smtp_security@ | @tls@ (puerto 587) o @ssl@. Con @none@ el Connector no arranca: el token no puede viajar sin cifrar. |
+| @smtp_oauth_token_url@ | Reemplazar @<tenant-id>@ por el _Directory (tenant) ID_. |
+| @smtp_oauth_scope@ | Siempre @https://outlook.office365.com/.default@ para Microsoft 365. |
+| @smtp_password@ | Se ignora cuando están las claves @smtp_oauth_*@. Conviene borrarlo. |
+
+Las cuatro claves @smtp_oauth_*@ van juntas: si aparece cualquiera de ellas, OAuth queda activado y el Connector no arranca hasta que estén las cuatro completas. La URL del token tiene que ser @https@, porque el _client secret_ viaja en ese pedido.
+
+*Nota*: si algún valor contiene el carácter @%@, hay que escribirlo como @%%@ (el parser de configuración lo interpreta). Los secretos de Entra ID no lo usan, pero vale la pena saberlo.
+
+h2. Paso 4: probar
+
+Desde la carpeta de instalación del Connector:
+
+<pre><code class="text">
+pytun.exe --config_ini connector.ini --test_smtp
+</code></pre>
+
+Si el email llega a @smtp_to@, reiniciar el servicio del Connector para que tome la configuración nueva (por defecto @sc stop InvGateTunnel@ y @sc start InvGateTunnel@). Si falla, el motivo queda en @logs/main_connector.log@: ver la tabla siguiente.
+
+h2. Errores frecuentes
+
+|_. Mensaje en el log |_. Causa |_. Qué hacer |
+| @Invalid smtp config: OAuth requires smtp_security tls or ssl@ | @smtp_security@ es @none@ o no está. | Poner @smtp_security = tls@ y @smtp_port = 587@. |
+| @Invalid smtp config: smtp_login is required with OAuth@ | Falta @smtp_login@. | Poner el buzón del Paso 2. |
+| @Invalid smtp config: OAuth needs all four smtp_oauth_* keys, missing: ...@ | Falta o está vacía alguna de las cuatro claves @smtp_oauth_*@. | Completar la que indica el mensaje. |
+| @Invalid smtp config: smtp_oauth_token_url must use https@ | La URL del token empieza con @http://@. | Usar @https://login.microsoftonline.com/...@ |
+| @Invalid smtp config: smtp_login must be ASCII with OAuth@ | El buzón tiene caracteres no ASCII (por ejemplo, acentos). | Usar un buzón o alias sin esos caracteres. |
+| @OAuth token request failed (401): invalid_client: AADSTS7000215@ | El secreto es inválido. Casi siempre es el _Secret ID_ en lugar del _Value_. | Generar un secreto nuevo y copiar el *Value*. |
+| @OAuth token request failed (401): ... AADSTS7000222@ | El secreto venció. | Ver "Mantenimiento":#Mantenimiento. |
+| @OAuth token request failed (400): ... AADSTS700016@ | El _client ID_ no existe en ese tenant. | Revisar @smtp_oauth_client_id@ y el tenant de la URL. |
+| @OAuth token request failed (400): ... AADSTS90002@ | El _tenant ID_ de la URL es incorrecto. | Revisar @smtp_oauth_token_url@. |
+| @OAuth token request failed (400): ... AADSTS70011@ o @AADSTS1002012@ | Scope inválido. | Usar exactamente @https://outlook.office365.com/.default@. |
+| @535 5.7.3 Authentication unsuccessful@ | Exchange no reconoce a la aplicación para ese buzón: falta @New-ServicePrincipal@, se usó el Object ID de _App registrations_, falta @Add-MailboxPermission@, o falta el _admin consent_ de @SMTP.SendAsApp@. | Repetir el _admin consent_ del Paso 1 y el Paso 2. Los cambios pueden tardar unos minutos en propagarse. |
+| @535 5.7.139 Authentication unsuccessful, SmtpClientAuthentication is disabled@ | SMTP AUTH está deshabilitado para el buzón o el tenant. | Ejecutar el @Set-CASMailbox@ del Paso 2. Si el tenant tiene _Security defaults_ activado, SMTP AUTH queda bloqueado: hay que desactivarlo o reemplazarlo por políticas de Conditional Access. |
+| @554 5.2.252 SendAsDenied@ | @smtp_from@ es distinto de @smtp_login@ y la aplicación no tiene _Send As_. | Borrar @smtp_from@ o ejecutar el @Add-RecipientPermission@ del Paso 2. |
+| @OAuth token request failed (200): no access_token in the response (Content-Type: text/html)@ | La URL del token no llega a Entra ID: un proxy, un portal cautivo o una URL equivocada responden con otra página. | Revisar @smtp_oauth_token_url@ y que el servidor llegue a @login.microsoftonline.com@ sin pasar por un portal. |
+| @OAuth token request failed, the token endpoint certificate is not trusted@ | Un proxy o firewall con inspección TLS intercepta el pedido del token. Ese pedido usa el bundle de CAs propio del Connector, no el almacén de Windows, y @smtp_tls_verify@ no lo afecta. | Excluir @login.microsoftonline.com@ de la inspección TLS. |
+| @The SMTP server certificate is not trusted (SMTP connection, ...)@ | Un proxy o firewall con inspección TLS intercepta la conexión SMTP, que usa el almacén de Windows. | Excluir @smtp.office365.com@ de la inspección TLS, o instalar la CA del proxy en el almacén de Windows. No usar @smtp_tls_verify = False@ con Microsoft 365: su certificado es público y siempre debería validar. |
+
+h2. Mantenimiento
+
+*Rotación del secreto* (antes de que venza):
+
+# En Entra ID, *Certificates & secrets → New client secret*, y copiar el *Value*.
+# Reemplazar @smtp_oauth_client_secret@ en @connector.ini@.
+# Probar con @--test_smtp@ y reiniciar el servicio.
+# Borrar el secreto viejo en Entra ID.
+
+*Revocar el acceso*: borrar el secreto o la aplicación en Entra ID, o quitar el permiso del buzón con @Remove-MailboxPermission@. El efecto es inmediato para tokens nuevos; un token ya emitido sigue siendo válido hasta su vencimiento (una hora como máximo).
+
+h2. ¿Y otros proveedores?
+
+El mecanismo que implementa el Connector es estándar: OAuth2 _client credentials_ para obtener el token y SASL @XOAUTH2@ para presentarlo. Funciona con cualquier servidor SMTP que acepte esa combinación, configurando la @smtp_oauth_token_url@ y el @smtp_oauth_scope@ que indique el proveedor. En la práctica, Microsoft 365 es el caso principal.
+
+|_. Proveedor |_. Recomendación |
+| Microsoft 365 | OAuth2, según esta guía. |
+| Google Workspace / Gmail | Gmail no ofrece _client credentials_ para SMTP. La única vía app-only es una _service account_ con _domain-wide delegation_, que puede hacerse pasar por *cualquier* buzón del dominio con acceso completo a Gmail: es una credencial demasiado poderosa para dejar en un servidor, y el Connector no la soporta. Usar una *App Password* (requiere verificación en dos pasos) con @smtp_login@ / @smtp_password@ contra @smtp.gmail.com:587@ y @smtp_security = tls@, o el _SMTP relay service_ de Workspace restringido por IP. |
+| Exchange on-premises, Postfix u otro relay interno | Relay autorizado por IP, sin autenticación: dejar vacíos @smtp_login@ y @smtp_password@. |
+| Microsoft 365 sin OAuth | Un conector de entrada de Exchange Online que autoriza el relay por IP pública fija (puerto 25 contra el endpoint MX del dominio). El retiro de la autenticación básica no lo afecta, pero requiere IP pública estática y configuración del lado de Exchange. |
+
+h2. Seguridad
+
+* El token solo viaja cifrado: el Connector se niega a arrancar si OAuth está configurado con @smtp_security = none@.
+* Desde la 1.3.0 el Connector *verifica el certificado y el hostname* del servidor SMTP en toda conexión @tls@ o @ssl@, con OAuth o con contraseña. Antes no lo hacía.
+* @smtp_tls_verify = False@ desactiva esa verificación. Existe solo para servidores internos con certificado autofirmado; con ella, quien pueda interceptar la conexión puede robar la credencial. El Connector lo advierte en el log al arrancar.
+* La contraseña SMTP y el _client secret_ no se escriben en los logs (antes de la 1.3.0 la contraseña aparecía en @main_connector.log@: si se usaron versiones anteriores, conviene rotarla y limpiar los logs viejos).
+
+h2. Al actualizar a la 1.3.0
+
+Como ahora se verifica el certificado del servidor SMTP, una instalación que usa un servidor con certificado autofirmado (o emitido por una CA que Windows no conoce) deja de enviar alertas, y el log muestra @CERTIFICATE_VERIFY_FAILED@ junto con una indicación de cómo resolverlo. Hay dos opciones:
+
+# *Recomendada*: instalar la CA que emitió el certificado en el almacén de certificados de Windows (_Trusted Root Certification Authorities_ del equipo). No hace falta reiniciar el servicio: el Connector lee el almacén en cada envío.
+# Agregar @smtp_tls_verify = False@ en @connector.ini@.
+
+Conviene correr @--test_smtp@ después de actualizar para detectarlo en el momento y no cuando haga falta una alerta.
