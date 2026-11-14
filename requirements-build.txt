@@ -18,7 +18,7 @@ certifi==2026.10.19
 cffi==2.1.1
 charset-normalizer==3.5.1
 cryptography==50.0.2
-dnspython==2.8.0
+dnspython==2.9.2
 humanfriendly==10.0
 idna==3.20
 pycparser==3.0
