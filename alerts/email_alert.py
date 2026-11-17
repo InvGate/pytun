@@ -69,15 +69,21 @@ def fetch_oauth_token(token_url, client_id, client_secret, scope):
 EXCHANGE_DIAGNOSTIC_MARKER = "[BeginDiagnosticData]"
 
 
+def _split_server_reply(error: smtplib.SMTPResponseException) -> tuple[str, str]:
+    """The reply split into its useful text and the Exchange diagnostic data (empty when there is none)."""
+    reply = error.smtp_error
+    if isinstance(reply, bytes):
+        reply = reply.decode("utf-8", "replace")
+    useful, marker, diagnostic = reply.partition(EXCHANGE_DIAGNOSTIC_MARKER)
+    return useful.rstrip(), marker + diagnostic
+
+
 def _summarize_send_error(error: BaseException) -> str:
     """The error as the ERROR line shows it: an SMTP reply cut at the Exchange diagnostic data, anything else as is."""
     if isinstance(error, smtplib.SMTPResponseException):
-        reply = error.smtp_error
-        if isinstance(reply, bytes):
-            reply = reply.decode("utf-8", "replace")
-        if EXCHANGE_DIAGNOSTIC_MARKER in reply:
-            useful = reply.split(EXCHANGE_DIAGNOSTIC_MARKER, 1)[0].rstrip()
-            return "%s %s [diagnostic data omitted, logged at DEBUG]" % (error.smtp_code, useful)
+        useful, diagnostic = _split_server_reply(error)
+        if diagnostic:
+            return "%s %s [diagnostic data logged at DEBUG]" % (error.smtp_code, useful)
     return str(error)
 
 
@@ -163,10 +169,15 @@ class EmailAlertSender(AlertSender):
                 if res:
                     self.logger.warning("It was not possible to send email: %s", res)
         except Exception as e:
-            # The traceback ends with str(e), so it goes to DEBUG only: the default level never repeats a long
-            # server reply, and DEBUG shows it exactly once.
             self.logger.error("Failed to send email %s", _summarize_send_error(e))
-            self.logger.debug("SMTP send failure details", exc_info=True)
+            # A traceback ends by repeating the error. For a server rejection it adds nothing (the reply is the
+            # cause), so DEBUG gets only the diagnostic data the ERROR line left out; other failures keep it.
+            if isinstance(e, smtplib.SMTPResponseException):
+                diagnostic = _split_server_reply(e)[1]
+                if diagnostic:
+                    self.logger.debug("Exchange diagnostic data: %s", diagnostic)
+            else:
+                self.logger.debug("Email send failure details", exc_info=True)
             if isinstance(e, ssl.SSLCertVerificationError):
                 self.logger.error("The SMTP server certificate is not trusted (SMTP connection, not the OAuth token "
                                   "request): install its CA in the system certificate store, or set "

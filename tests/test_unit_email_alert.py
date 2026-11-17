@@ -994,8 +994,33 @@ class TestEmailAlertSenderErrorLogNoise:
         output = "\n".join(_rendered(caplog.records))
         assert output.count("[BeginDiagnosticData]") == 1
         assert output.count(DIAGNOSTIC_BLOB) == 1
+        assert output.count("[Hostname=BYAPR15MB2919.namprd15.prod.outlook.com]") == 1
         debug = [r for r in caplog.records if r.levelno == logging.DEBUG]
-        assert any(r.exc_info for r in debug)  # traceback kept for support
+        assert any("[BeginDiagnosticData]" in r.getMessage() for r in debug)
+
+    def test_server_rejection_is_shown_once_even_at_debug(self, monkeypatch, logger, caplog):
+        sender = _sender_failing_sendmail(
+            monkeypatch, logger, smtplib.SMTPDataError(554, SEND_AS_DENIED_REPLY))
+
+        with caplog.at_level(logging.DEBUG, logger=logger.name):
+            sender.send_alert("tunnel-noise-6")
+
+        output = "\n".join(_rendered(caplog.records))
+        assert output.count("not allowed to send as other@example.com") == 1
+        assert "Traceback" not in output
+        assert all(r.exc_info is None for r in caplog.records)
+
+    def test_other_failures_keep_the_traceback_at_debug(self, monkeypatch, logger, caplog):
+        sender = _sender_failing_sendmail(monkeypatch, logger, ConnectionResetError("connection reset"))
+
+        with caplog.at_level(logging.DEBUG, logger=logger.name):
+            sender.send_alert("tunnel-noise-7")
+
+        errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert [r.getMessage() for r in errors] == ["Failed to send email connection reset"]
+        assert errors[0].exc_info is None
+        debug = [r for r in caplog.records if r.levelno == logging.DEBUG and r.exc_info]
+        assert len(debug) == 1
 
     def test_default_level_shows_the_blob_zero_times(self, monkeypatch, logger, caplog):
         sender = _sender_failing_sendmail(
@@ -1017,6 +1042,7 @@ class TestEmailAlertSenderErrorLogNoise:
 
         errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
         assert [r.getMessage() for r in errors] == ["Failed to send email %s" % (error,)]
+        assert all(r.exc_info is None for r in caplog.records)
 
     def test_marker_failure_still_reraises_when_exception_on_failure(self, monkeypatch, logger):
         sender = _sender_failing_sendmail(
