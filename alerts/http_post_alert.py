@@ -20,6 +20,10 @@ class HTTPPostAlertSender(AlertSender):
             resp = requests.post(self.post_url, auth=auth_data, data=json.dumps(data))
             resp.raise_for_status()
         except Exception as e:
-            self.logger.exception("Failed to post alert %r", e)
+            self.logger.error("Failed to post alert %r", e)
+            # A traceback ends by repeating the error. For an HTTP error status it adds nothing (the response is
+            # the cause); other failures keep it at DEBUG.
+            if not isinstance(e, requests.exceptions.HTTPError):
+                self.logger.debug("HTTP post failure details", exc_info=True)
             if exception_on_failure:
                 raise e
