@@ -376,7 +376,8 @@ def test_http_and_exit(logger, post_sender):
     try:
         post_sender.send_alert("Testing post", message="Testing email", exception_on_failure=True)
     except Exception as e:
-        logger.exception("Failed to send post %r", e)
+        # send_alert already logged the error with its details.
+        logger.error("HTTP post test failed (%s)", type(e).__name__)
         sys.exit(1)
     logger.info("HTTP post test success!")
     sys.exit(0)

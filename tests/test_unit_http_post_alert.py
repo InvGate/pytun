@@ -195,3 +195,39 @@ class TestHTTPPostAlertSenderErrorHandling:
 
         with pytest.raises(requests.exceptions.ConnectionError):
             sender.send_alert("tunnel-a", exception_on_failure=True)
+
+
+class TestHTTPPostAlertSenderErrorLog:
+    def test_server_rejection_is_logged_once_without_traceback(self, http_server, logger, caplog):
+        import logging
+        http_server.response_status = 500
+        sender = HTTPPostAlertSender(
+            tunnel_manager_id="mgr-1", post_url=_url(http_server), user=None, password=None, logger=logger)
+
+        with caplog.at_level(logging.DEBUG, logger=logger.name):
+            sender.send_alert("tunnel-a")
+
+        errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert len(errors) == 1
+        assert "500 Server Error" in errors[0].getMessage()
+        assert all(r.exc_info is None for r in caplog.records)
+        output = "\n".join(logging.Formatter().format(r) for r in caplog.records)
+        assert output.count("500 Server Error") == 1
+
+    def test_other_failures_keep_the_traceback_at_debug(self, logger, caplog):
+        import logging
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", 0))
+            free_port = probe.getsockname()[1]
+        sender = HTTPPostAlertSender(
+            tunnel_manager_id="mgr-1", post_url="http://127.0.0.1:%d/alert" % free_port,
+            user=None, password=None, logger=logger)
+
+        with caplog.at_level(logging.DEBUG, logger=logger.name):
+            sender.send_alert("tunnel-a")
+
+        errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert len(errors) == 1
+        assert errors[0].getMessage().startswith("Failed to post alert ConnectionError(")
+        assert errors[0].exc_info is None
+        assert len([r for r in caplog.records if r.levelno == logging.DEBUG and r.exc_info]) == 1

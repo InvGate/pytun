@@ -166,6 +166,24 @@ class TestHttpAndExit:
             pytun.test_http_and_exit(logger, _Sender())
         assert exc_info.value.code == 1
 
+    def test_send_failure_is_not_logged_again(self, caplog):
+        # send_alert already logged the error; the test only adds a short line.
+        log = logging.getLogger("test-pytun-gaps-http")
+
+        class _Sender:
+            def send_alert(self, *a, **k):
+                raise RuntimeError("500 Server Error")
+
+        with caplog.at_level(logging.DEBUG, logger=log.name):
+            with pytest.raises(SystemExit) as exc_info:
+                pytun.test_http_and_exit(log, _Sender())
+
+        assert exc_info.value.code == 1
+        assert [r.levelno for r in caplog.records] == [logging.ERROR]
+        record = caplog.records[0]
+        assert record.getMessage() == "HTTP post test failed (RuntimeError)"
+        assert record.exc_info is None
+
 
 class TestRegisterSignalHandlers:
     def test_exit_gracefully_shuts_down_pool_and_terminates_all_processes(self, monkeypatch):
