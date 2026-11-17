@@ -362,7 +362,8 @@ def test_mail_and_exit(logger, smtp_sender):
     try:
         smtp_sender.send_alert("Testing email", message="Testing email", exception_on_failure=True)
     except Exception as e:
-        logger.exception("Failed to send email %r", e)
+        # send_alert already logged the error with its details; repeating it here doubled a long server reply.
+        logger.error("Mail test failed (%s)", type(e).__name__)
         sys.exit(1)
     logger.info("Mail test success!")
     sys.exit(0)

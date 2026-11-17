@@ -64,6 +64,23 @@ def fetch_oauth_token(token_url, client_id, client_secret, scope):
     raise OAuthTokenError("OAuth token request failed (%s): %s" % (response.status_code, reason))
 
 
+# Exchange Online appends kilobytes of internal codes to some replies (e.g. 5.2.252 SendAsDenied); the useful part
+# is the text before this marker.
+EXCHANGE_DIAGNOSTIC_MARKER = "[BeginDiagnosticData]"
+
+
+def _summarize_send_error(error: BaseException) -> str:
+    """The error as the ERROR line shows it: an SMTP reply cut at the Exchange diagnostic data, anything else as is."""
+    if isinstance(error, smtplib.SMTPResponseException):
+        reply = error.smtp_error
+        if isinstance(reply, bytes):
+            reply = reply.decode("utf-8", "replace")
+        if EXCHANGE_DIAGNOSTIC_MARKER in reply:
+            useful = reply.split(EXCHANGE_DIAGNOSTIC_MARKER, 1)[0].rstrip()
+            return "%s %s [diagnostic data omitted, logged at DEBUG]" % (error.smtp_code, useful)
+    return str(error)
+
+
 class EmailAlertSender(AlertSender):
 
     def __init__(self, tunnel_manager_id, host, login, password, to_address, logger, security=None, port=25,
@@ -146,7 +163,10 @@ class EmailAlertSender(AlertSender):
                 if res:
                     self.logger.warning("It was not possible to send email: %s", res)
         except Exception as e:
-            self.logger.exception("Failed to send email %s" % (e,))
+            # The traceback ends with str(e), so it goes to DEBUG only: the default level never repeats a long
+            # server reply, and DEBUG shows it exactly once.
+            self.logger.error("Failed to send email %s", _summarize_send_error(e))
+            self.logger.debug("SMTP send failure details", exc_info=True)
             if isinstance(e, ssl.SSLCertVerificationError):
                 self.logger.error("The SMTP server certificate is not trusted (SMTP connection, not the OAuth token "
                                   "request): install its CA in the system certificate store, or set "

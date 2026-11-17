@@ -923,3 +923,104 @@ def test_no_ssl_context_is_built_for_a_plain_connection(fake_smtp_server, logger
     fake_smtp_server._thread.join(timeout=5)
     assert built == []
     assert len(fake_smtp_server.received) == 1
+
+
+DIAGNOSTIC_BLOB = "1.84300:01000000, 1.84300:01000001, " * 200
+SEND_AS_DENIED_REPLY = (
+    "5.2.252 SendAsDenied; alerts@example.com not allowed to send as other@example.com; "
+    "STOREDRV.Submission.Exception:SendAsDeniedException.MapiExceptionSendAsDenied; "
+    "Failed to process message due to a permanent exception with message "
+    "[BeginDiagnosticData]Cannot submit message. " + DIAGNOSTIC_BLOB +
+    "[EndDiagnosticData] [Hostname=BYAPR15MB2919.namprd15.prod.outlook.com]"
+).encode()
+
+
+def _sender_failing_sendmail(monkeypatch, logger, error):
+    class FakeSMTP:
+        def __init__(self, host, port, timeout=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def sendmail(self, *args):
+            raise error
+
+    monkeypatch.setattr("smtplib.SMTP", FakeSMTP)
+    return EmailAlertSender(
+        tunnel_manager_id="mgr-1",
+        host="smtp.example.com",
+        login=None,
+        password=None,
+        from_address="alerts@example.com",
+        to_address="ops@example.com",
+        logger=logger,
+        security="none",
+    )
+
+
+def _rendered(records):
+    """Each record as a handler would write it: message plus traceback."""
+    formatter = logging.Formatter()
+    return [formatter.format(record) for record in records]
+
+
+class TestEmailAlertSenderErrorLogNoise:
+    def test_error_line_cuts_the_reply_at_the_diagnostic_marker(self, monkeypatch, logger, caplog):
+        sender = _sender_failing_sendmail(
+            monkeypatch, logger, smtplib.SMTPDataError(554, SEND_AS_DENIED_REPLY))
+
+        with caplog.at_level(logging.DEBUG, logger=logger.name):
+            sender.send_alert("tunnel-noise-1")
+
+        errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert len(errors) == 1
+        line = _rendered(errors)[0]
+        assert "554 5.2.252 SendAsDenied; alerts@example.com not allowed to send as other@example.com" in line
+        assert "BeginDiagnosticData" not in line
+        assert "1.84300" not in line
+        assert errors[0].exc_info is None
+
+    def test_full_reply_is_logged_once_at_debug(self, monkeypatch, logger, caplog):
+        sender = _sender_failing_sendmail(
+            monkeypatch, logger, smtplib.SMTPDataError(554, SEND_AS_DENIED_REPLY))
+
+        with caplog.at_level(logging.DEBUG, logger=logger.name):
+            sender.send_alert("tunnel-noise-2")
+
+        output = "\n".join(_rendered(caplog.records))
+        assert output.count("[BeginDiagnosticData]") == 1
+        assert output.count(DIAGNOSTIC_BLOB) == 1
+        debug = [r for r in caplog.records if r.levelno == logging.DEBUG]
+        assert any(r.exc_info for r in debug)  # traceback kept for support
+
+    def test_default_level_shows_the_blob_zero_times(self, monkeypatch, logger, caplog):
+        sender = _sender_failing_sendmail(
+            monkeypatch, logger, smtplib.SMTPDataError(554, SEND_AS_DENIED_REPLY))
+
+        with caplog.at_level(logging.INFO, logger=logger.name):
+            sender.send_alert("tunnel-noise-3")
+
+        output = "\n".join(_rendered(caplog.records))
+        assert "BeginDiagnosticData" not in output
+        assert "1.84300" not in output
+
+    def test_reply_without_marker_is_logged_unchanged(self, monkeypatch, logger, caplog):
+        error = smtplib.SMTPDataError(550, b"5.7.1 Relay denied")
+        sender = _sender_failing_sendmail(monkeypatch, logger, error)
+
+        with caplog.at_level(logging.DEBUG, logger=logger.name):
+            sender.send_alert("tunnel-noise-4")
+
+        errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert [r.getMessage() for r in errors] == ["Failed to send email %s" % (error,)]
+
+    def test_marker_failure_still_reraises_when_exception_on_failure(self, monkeypatch, logger):
+        sender = _sender_failing_sendmail(
+            monkeypatch, logger, smtplib.SMTPDataError(554, SEND_AS_DENIED_REPLY))
+
+        with pytest.raises(smtplib.SMTPDataError):
+            sender.send_alert("tunnel-noise-5", exception_on_failure=True)

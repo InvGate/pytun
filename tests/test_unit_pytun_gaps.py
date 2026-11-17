@@ -121,6 +121,26 @@ class TestMailAndExit:
             pytun.test_mail_and_exit(logger, _Sender())
         assert exc_info.value.code == 1
 
+    def test_send_failure_is_not_logged_again(self, caplog):
+        # send_alert already logged the error; the test only adds a short line.
+        log = logging.getLogger("test-pytun-gaps-mail")
+        blob = "[BeginDiagnosticData]Cannot submit message.[EndDiagnosticData]"
+
+        class _Sender:
+            def send_alert(self, *a, **k):
+                raise RuntimeError("554 SendAsDenied " + blob)
+
+        with caplog.at_level(logging.DEBUG, logger=log.name):
+            with pytest.raises(SystemExit) as exc_info:
+                pytun.test_mail_and_exit(log, _Sender())
+
+        assert exc_info.value.code == 1
+        assert [r.levelno for r in caplog.records] == [logging.ERROR]
+        record = caplog.records[0]
+        assert record.getMessage().startswith("Mail test failed")
+        assert "BeginDiagnosticData" not in record.getMessage()
+        assert record.exc_info is None
+
 
 class TestHttpAndExit:
     def test_no_sender_configured_exits_two(self, logger):
