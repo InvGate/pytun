@@ -164,7 +164,7 @@ h2. Mantenimiento
 # Probar con @--test_smtp@ y reiniciar el servicio.
 # Borrar el secreto viejo en Entra ID.
 
-*Revocar el acceso*: borrar el secreto o la aplicación en Entra ID, o quitar el permiso del buzón con @Remove-MailboxPermission@. El efecto es inmediato para tokens nuevos; un token ya emitido sigue siendo válido hasta su vencimiento (una hora como máximo).
+*Revocar el acceso*: borrar el secreto o la aplicación en Entra ID, o quitar el permiso del buzón con @Remove-MailboxPermission@. Si se configuró otro remitente, quitar también el _Send As_ con @Remove-RecipientPermission -Identity "otro-remitente@contoso.com" -Trustee "alertas-connector@contoso.com" -AccessRights SendAs@. El efecto es inmediato para tokens nuevos; un token ya emitido sigue siendo válido hasta su vencimiento (una hora como máximo).
 
 h2. ¿Y otros proveedores?
 
