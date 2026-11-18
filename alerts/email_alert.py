@@ -4,6 +4,7 @@ import ssl
 from email.mime.text import MIMEText
 from urllib.parse import urlsplit
 
+import certifi
 import requests
 from email_validator import validate_email
 
@@ -123,7 +124,11 @@ class EmailAlertSender(AlertSender):
             # cached, so a CA installed after startup (the fix for an untrusted certificate) needs no restart.
             context = None
             if self.tls_verify and self.security != SecurityValues.none:
+                # Trust the system store (corporate CAs) plus certifi (public CAs). Windows adds a public root to
+                # its store only when Schannel fetches it on demand, which OpenSSL never triggers, so a server
+                # that rarely browses would otherwise reject a valid public certificate.
                 context = ssl.create_default_context()
+                context.load_verify_locations(cafile=certifi.where())
 
             if self.security == SecurityValues.ssl:
                 server = smtplib.SMTP_SSL(self.host, self.port, timeout=SMTP_CONNECTION_TIMEOUT, context=context)
@@ -149,7 +154,8 @@ class EmailAlertSender(AlertSender):
             self.logger.exception("Failed to send email %s" % (e,))
             if isinstance(e, ssl.SSLCertVerificationError):
                 self.logger.error("The SMTP server certificate is not trusted (SMTP connection, not the OAuth token "
-                                  "request): install its CA in the system certificate store, or set "
+                                  "request): it is not issued by a public CA nor by one in the system certificate store. "
+                                  "Install its CA in the system certificate store, or set "
                                   "smtp_tls_verify = False (not recommended)")
             if exception_on_failure:
                 raise e

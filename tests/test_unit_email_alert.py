@@ -648,6 +648,28 @@ def _verifies_certificates(context):
     return context is not None and context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
 
 
+def _self_signed_ca_pem(path, common_name):
+    """Write a throwaway self-signed CA certificate to path and return path."""
+    import datetime
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name)])
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cert = (x509.CertificateBuilder()
+            .subject_name(name).issuer_name(name).public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - datetime.timedelta(days=1)).not_valid_after(now + datetime.timedelta(days=1))
+            .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+            .sign(key, hashes.SHA256()))
+    path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    return path
+
+
 class TestOAuth2:
     def test_authenticates_with_xoauth2_using_a_client_credentials_token(
             self, fake_smtp_server, logger, token_endpoint, starttls_contexts):
@@ -818,6 +840,24 @@ class TestTlsVerification:
 
         fake_smtp_server._thread.join(timeout=5)
         (context,) = starttls_contexts
+        assert _verifies_certificates(context)
+
+    def test_trusts_the_system_store_and_certifi_bundle_together(
+            self, fake_smtp_server, logger, starttls_contexts, monkeypatch, tmp_path):
+        # Windows only adds a public root to its store after Schannel fetches it on demand, which
+        # OpenSSL never triggers, so a fresh server rejects valid public certificates without certifi.
+        # SSL_CERT_FILE stands in for the system store: load_default_certs() reads it on every platform.
+        system_ca = _self_signed_ca_pem(tmp_path / "system.pem", "Corporate CA")
+        certifi_ca = _self_signed_ca_pem(tmp_path / "certifi.pem", "Public CA")
+        monkeypatch.setenv("SSL_CERT_FILE", str(system_ca))
+        monkeypatch.setattr("certifi.where", lambda: str(certifi_ca))
+
+        self._password_sender(fake_smtp_server, logger).send_alert("tls-verify-tunnel-certifi")
+
+        fake_smtp_server._thread.join(timeout=5)
+        (context,) = starttls_contexts
+        trusted = {dict(rdn[0] for rdn in ca["subject"])["commonName"] for ca in context.get_ca_certs()}
+        assert {"Corporate CA", "Public CA"} <= trusted
         assert _verifies_certificates(context)
 
     @pytest.mark.parametrize("auth", ["password", "oauth2"])
