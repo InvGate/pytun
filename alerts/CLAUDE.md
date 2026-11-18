@@ -19,7 +19,8 @@ the RFC 6749 `error`/`error_description` and never the raw body (a wrong URL can
 Setup guide: `docs/smtp_oauth.textile` (Textile, for Redmine).
 
 **TLS verification**: smtplib's own default context does **not** verify the server certificate, so every tls/ssl
-connection passes `ssl.create_default_context()`, built per send so a CA installed after startup needs no restart. `smtp_tls_verify = False` falls back to smtplib's default (for
+connection passes `ssl.create_default_context()` plus `certifi.where()` (trust = system store ∪ certifi: Windows only
+adds a public root after Schannel fetches it on demand, which OpenSSL never triggers), built per send so a CA installed after startup needs no restart. `smtp_tls_verify = False` falls back to smtplib's default (for
 self-signed servers) and logs a warning at startup; a `SSLCertVerificationError` logs how to fix it.
 
 The constructor log names the auth method, never the password or client secret.
