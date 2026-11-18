@@ -72,6 +72,9 @@ inspection_localhost_only=True    # KEEP TRUE - security critical
 # Optional SMTP
 smtp_hostname=  smtp_port=587  smtp_security=tls|ssl|none
 smtp_login=  smtp_password=  smtp_to=   # ⚠️ plain text
+smtp_tls_verify=True              # verify the SMTP server certificate; False only for self-signed servers
+# Optional SMTP OAuth2 (XOAUTH2, client credentials; replaces smtp_password, needs tls|ssl)
+smtp_oauth_token_url=  smtp_oauth_client_id=  smtp_oauth_client_secret=  smtp_oauth_scope=
 
 # Optional HTTP POST
 http_url=  http_user=  http_password=   # ⚠️ plain text
@@ -135,7 +138,7 @@ Known bugs are pinned as `xfail(strict=True)` tests: fixing one makes its test X
 - [ ] No secrets/credentials in code
 - [ ] Update relevant CLAUDE.md if adding components
 
-**Code style**: Follow existing patterns. Add type hints where possible but maintain 3.6+ compatibility (`Union[str, int]` not `str | int`).
+**Code style**: Follow existing patterns. Add type hints where possible. The baseline is Python 3.10, the version TMT (the service pytun talks to) runs, so `str | int` is fine.
 
 **Path resolution**: Main config paths are relative to the application directory; tunnel config paths (e.g. `keyfile`) are relative to the config file's directory.
 

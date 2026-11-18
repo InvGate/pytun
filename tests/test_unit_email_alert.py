@@ -8,15 +8,19 @@ end to end; the tls/ssl branches only change which smtplib class is used and
 whether starttls() is called, so those are covered by mocking smtplib
 directly, per the task instructions.
 """
+import base64
 import gc
+import logging
 import smtplib
 import socket
+import ssl
 import threading
 
 import pytest
+import requests
 from ratelimit.exception import RateLimitException
 
-from alerts.email_alert import EmailAlertSender, SecurityValues
+from alerts.email_alert import EmailAlertSender, OAuthTokenError, SecurityValues, fetch_oauth_token
 
 
 def _cell_for(func, freevar_name):
@@ -68,9 +72,11 @@ class _FakeSMTPServer:
 
     Records every MAIL FROM / RCPT TO / DATA payload it receives so tests can
     assert on message content, sender, recipient and login credentials.
+    With reject_xoauth2, AUTH XOAUTH2 gets the error challenge a real server
+    sends for a bad token, then 535 once the client answers it.
     """
 
-    def __init__(self):
+    def __init__(self, reject_xoauth2=False):
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.bind(("127.0.0.1", 0))
         self._sock.listen(1)
@@ -78,6 +84,9 @@ class _FakeSMTPServer:
         self.host, self.port = self._sock.getsockname()
         self.received = []
         self.login_attempted = None
+        self.reject_xoauth2 = reject_xoauth2
+        self.xoauth2 = None
+        self.xoauth2_challenge_reply = None
         self._thread = threading.Thread(target=self._serve_one, daemon=True)
         self._thread.start()
 
@@ -100,7 +109,7 @@ class _FakeSMTPServer:
                 cmd = line.decode("ascii", "replace").strip()
                 upper = cmd.upper()
                 if upper.startswith("EHLO") or upper.startswith("HELO"):
-                    f.write(b"250-fake-smtp\r\n250 AUTH LOGIN PLAIN\r\n")
+                    f.write(b"250-fake-smtp\r\n250 AUTH LOGIN PLAIN XOAUTH2\r\n")
                 elif upper.startswith("AUTH LOGIN"):
                     f.write(b"334 VXNlcm5hbWU6\r\n")
                     f.flush()
@@ -110,6 +119,16 @@ class _FakeSMTPServer:
                     pass_line = f.readline()
                     self.login_attempted = (user_line.strip(), pass_line.strip())
                     f.write(b"235 Authentication successful\r\n")
+                elif upper.startswith("AUTH XOAUTH2"):
+                    self.xoauth2 = base64.b64decode(cmd.split(" ", 2)[2])
+                    if self.reject_xoauth2:
+                        error = base64.b64encode(b'{"status":"401","schemes":"bearer"}')
+                        f.write(b"334 " + error + b"\r\n")
+                        f.flush()
+                        self.xoauth2_challenge_reply = f.readline().strip()
+                        f.write(b"535 5.7.3 Authentication unsuccessful\r\n")
+                    else:
+                        f.write(b"235 Authentication successful\r\n")
                 elif upper.startswith("MAIL FROM"):
                     mail_from = cmd
                     f.write(b"250 OK\r\n")
@@ -245,7 +264,7 @@ class TestEmailAlertSenderSecurityBranches:
         calls = {}
 
         class FakeSMTPSSL:
-            def __init__(self, host, port, timeout=None):
+            def __init__(self, host, port, timeout=None, context=None):
                 calls["init"] = (host, port, timeout)
 
             def __enter__(self):
@@ -254,7 +273,7 @@ class TestEmailAlertSenderSecurityBranches:
             def __exit__(self, *exc):
                 return False
 
-            def starttls(self):
+            def starttls(self, context=None):
                 calls["starttls"] = True
 
             def login(self, user, password):
@@ -286,7 +305,7 @@ class TestEmailAlertSenderSecurityBranches:
         calls = {}
 
         class FakeSMTP:
-            def __init__(self, host, port, timeout=None):
+            def __init__(self, host, port, timeout=None, context=None):
                 calls["init"] = (host, port, timeout)
 
             def __enter__(self):
@@ -295,7 +314,7 @@ class TestEmailAlertSenderSecurityBranches:
             def __exit__(self, *exc):
                 return False
 
-            def starttls(self):
+            def starttls(self, context=None):
                 calls["starttls"] = True
 
             def login(self, user, password):
@@ -333,7 +352,7 @@ class TestEmailAlertSenderSecurityBranches:
             def __exit__(self, *exc):
                 return False
 
-            def starttls(self):
+            def starttls(self, context=None):
                 calls["starttls"] = True
 
             def login(self, user, password):
@@ -547,3 +566,360 @@ class TestSendmailPartialFailureIsWarned:
 
         assert len(warnings) == 1
         assert "unreachable@example.com" in str(warnings[0])
+
+
+# ---------------------------------------------------------------- OAuth2
+
+OAUTH = {
+    "token_url": "https://login.example.com/tenant-id/oauth2/v2.0/token",
+    "client_id": "client-id-123",
+    "client_secret": "client-secret-XYZ",
+    "scope": "https://outlook.office365.com/.default",
+}
+
+
+_NOT_JSON = object()
+
+
+class _FakeTokenResponse:
+    def __init__(self, status_code=200, payload=_NOT_JSON, content_type="application/json"):
+        self.status_code = status_code
+        self.ok = status_code < 400
+        self._payload = payload
+        self.headers = {"Content-Type": content_type}
+
+    def json(self):
+        if self._payload is _NOT_JSON:
+            raise ValueError("Expecting value: line 1 column 1 (char 0)")
+        return self._payload
+
+
+def _token_endpoint_returning(monkeypatch, response):
+    monkeypatch.setattr("alerts.email_alert.requests.post", lambda *a, **k: response)
+
+
+@pytest.fixture
+def token_endpoint(monkeypatch):
+    """Stands in for the OAuth token endpoint: records each request, grants a fixed token."""
+    calls = []
+
+    def fake_post(url, data=None, timeout=None):
+        calls.append({"url": url, "data": data, "timeout": timeout})
+        return _FakeTokenResponse(payload={"access_token": "access-token-abc", "expires_in": 3599})
+
+    monkeypatch.setattr("alerts.email_alert.requests.post", fake_post)
+    return calls
+
+
+@pytest.fixture
+def starttls_contexts(monkeypatch):
+    """Real TLS is out of scope (module docstring), so the STARTTLS upgrade
+    only records the SSL context it was given. The rest of smtplib.SMTP stays
+    real, so AUTH XOAUTH2 crosses the wire to the fake server as it would to
+    a real one.
+    """
+    contexts = []
+
+    def fake_starttls(self, context=None):
+        contexts.append(context)
+        return 220, b"ready"
+
+    monkeypatch.setattr(smtplib.SMTP, "starttls", fake_starttls)
+    return contexts
+
+
+def _oauth_sender(server, logger, **overrides):
+    kwargs = dict(
+        tunnel_manager_id="mgr-1",
+        host=server.host,
+        login="mailbox@example.com",
+        password=None,
+        to_address="ops@example.com",
+        logger=logger,
+        security="tls",
+        port=server.port,
+        oauth=OAUTH,
+    )
+    kwargs.update(overrides)
+    return EmailAlertSender(**kwargs)
+
+
+def _verifies_certificates(context):
+    return context is not None and context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+
+
+class TestOAuth2:
+    def test_authenticates_with_xoauth2_using_a_client_credentials_token(
+            self, fake_smtp_server, logger, token_endpoint, starttls_contexts):
+        _oauth_sender(fake_smtp_server, logger).send_alert("oauth-tunnel-1")
+
+        fake_smtp_server._thread.join(timeout=5)
+        assert token_endpoint == [{
+            "url": OAUTH["token_url"],
+            "data": {
+                "grant_type": "client_credentials",
+                "client_id": OAUTH["client_id"],
+                "client_secret": OAUTH["client_secret"],
+                "scope": OAUTH["scope"],
+            },
+            "timeout": 10,
+        }]
+        assert fake_smtp_server.xoauth2 == b"user=mailbox@example.com\x01auth=Bearer access-token-abc\x01\x01"
+        assert fake_smtp_server.login_attempted is None
+        assert len(fake_smtp_server.received) == 1
+
+    def test_starttls_verifies_the_server_certificate(
+            self, fake_smtp_server, logger, token_endpoint, starttls_contexts):
+        _oauth_sender(fake_smtp_server, logger).send_alert("oauth-tunnel-2")
+
+        fake_smtp_server._thread.join(timeout=5)
+        (context,) = starttls_contexts
+        assert _verifies_certificates(context)
+
+    def test_ssl_verifies_the_server_certificate(self, logger, token_endpoint, monkeypatch):
+        calls = {}
+
+        class FakeSMTPSSL:
+            def __init__(self, host, port, timeout=None, context=None):
+                calls["context"] = context
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def ehlo_or_helo_if_needed(self):
+                pass
+
+            def auth(self, mechanism, authobject):
+                calls["auth"] = (mechanism, authobject())
+
+            def sendmail(self, *args):
+                return {}
+
+        monkeypatch.setattr("smtplib.SMTP_SSL", FakeSMTPSSL)
+        sender = EmailAlertSender(
+            tunnel_manager_id="mgr-1",
+            host="smtp.example.com",
+            login="mailbox@example.com",
+            password=None,
+            to_address="ops@example.com",
+            logger=logger,
+            security="ssl",
+            port=465,
+            oauth=OAUTH,
+        )
+
+        sender.send_alert("oauth-tunnel-3")
+
+        assert _verifies_certificates(calls["context"])
+        assert calls["auth"][0] == "XOAUTH2"
+
+    def test_rejected_token_answers_the_error_challenge_empty_and_raises(
+            self, logger, token_endpoint, starttls_contexts):
+        server = _FakeSMTPServer(reject_xoauth2=True)
+        try:
+            with pytest.raises(smtplib.SMTPAuthenticationError):
+                _oauth_sender(server, logger).send_alert("oauth-tunnel-4", exception_on_failure=True)
+            server._thread.join(timeout=5)
+        finally:
+            server.close()
+
+        assert server.xoauth2_challenge_reply == b""  # RFC: the client ends the exchange empty
+        assert server.received == []
+
+    def test_token_endpoint_error_is_raised_with_its_reason_before_smtp_is_contacted(self, logger, monkeypatch):
+        _token_endpoint_returning(monkeypatch, _FakeTokenResponse(401, {
+            "error": "invalid_client", "error_description": "AADSTS7000215: Invalid client secret provided."}))
+        opened = []
+        monkeypatch.setattr("smtplib.SMTP", lambda *a, **k: opened.append(a))
+        sender = EmailAlertSender(
+            tunnel_manager_id="mgr-1",
+            host="smtp.office365.com",
+            login="mailbox@example.com",
+            password=None,
+            to_address="ops@example.com",
+            logger=logger,
+            security="tls",
+            port=587,
+            oauth=OAUTH,
+        )
+
+        with pytest.raises(OAuthTokenError, match="invalid_client: AADSTS7000215"):
+            sender.send_alert("oauth-tunnel-5", exception_on_failure=True)
+        assert opened == []
+
+    @pytest.mark.parametrize("missing", ["token_url", "client_id", "client_secret", "scope"])
+    def test_requires_all_four_oauth_keys(self, logger, missing):
+        with pytest.raises(ValueError, match="missing: smtp_oauth_" + missing):
+            EmailAlertSender("mgr-1", "smtp.example.com", "mailbox@example.com", None, "ops@example.com",
+                             logger, security="tls", oauth=dict(OAUTH, **{missing: None}))
+
+    def test_refuses_to_send_the_client_secret_to_a_plain_http_token_url(self, logger):
+        with pytest.raises(ValueError, match="https"):
+            EmailAlertSender("mgr-1", "smtp.example.com", "mailbox@example.com", None, "ops@example.com",
+                             logger, security="tls",
+                             oauth=dict(OAUTH, token_url="http://login.example.com/tenant-id/oauth2/v2.0/token"))
+
+    def test_refuses_a_non_ascii_login_that_xoauth2_cannot_carry(self, logger):
+        with pytest.raises(ValueError, match="ASCII"):
+            EmailAlertSender("mgr-1", "smtp.example.com", "alertas-conexión@example.com", None, "ops@example.com",
+                             logger, security="tls", from_address="alerts@example.com", oauth=OAUTH)
+
+    def test_requires_the_mailbox_login(self, logger):
+        with pytest.raises(ValueError, match="smtp_login"):
+            EmailAlertSender("mgr-1", "smtp.example.com", None, None, "ops@example.com", logger,
+                             security="tls", from_address="alerts@example.com", oauth=OAUTH)
+
+    @pytest.mark.parametrize("security", ["none", None])
+    def test_refuses_to_send_the_token_without_tls(self, logger, security):
+        with pytest.raises(ValueError, match="tls or ssl"):
+            EmailAlertSender("mgr-1", "smtp.example.com", "mailbox@example.com", None, "ops@example.com",
+                             logger, security=security, oauth=OAUTH)
+
+
+class TestSecretsStayOutOfTheLog:
+    def test_constructor_log_names_the_auth_method_but_no_secret(self, logger, caplog):
+        with caplog.at_level(logging.DEBUG, logger=logger.name):
+            EmailAlertSender("mgr-1", "smtp.example.com", "user@example.com", "smtp-password-XYZ",
+                             "ops@example.com", logger, security="tls")
+            EmailAlertSender("mgr-1", "smtp.example.com", "mailbox@example.com", None,
+                             "ops@example.com", logger, security="tls", oauth=OAUTH)
+
+        assert "smtp-password-XYZ" not in caplog.text
+        assert OAUTH["client_secret"] not in caplog.text
+        assert "auth=password" in caplog.text
+        assert "auth=oauth2" in caplog.text
+
+
+class TestTlsVerification:
+    """smtplib's own default does not verify the server certificate; the
+    sender verifies unless smtp_tls_verify = False opts out.
+    """
+
+    def _password_sender(self, server, logger, **overrides):
+        kwargs = dict(
+            tunnel_manager_id="mgr-1",
+            host=server.host,
+            login="user@example.com",
+            password="pw",
+            to_address="ops@example.com",
+            logger=logger,
+            security="tls",
+            port=server.port,
+        )
+        kwargs.update(overrides)
+        return EmailAlertSender(**kwargs)
+
+    def test_password_auth_over_starttls_verifies_the_server_certificate(
+            self, fake_smtp_server, logger, starttls_contexts):
+        self._password_sender(fake_smtp_server, logger).send_alert("tls-verify-tunnel-1")
+
+        fake_smtp_server._thread.join(timeout=5)
+        (context,) = starttls_contexts
+        assert _verifies_certificates(context)
+
+    @pytest.mark.parametrize("auth", ["password", "oauth2"])
+    def test_tls_verify_false_falls_back_to_smtplibs_unverified_default(
+            self, fake_smtp_server, logger, token_endpoint, starttls_contexts, auth):
+        sender = (_oauth_sender(fake_smtp_server, logger, tls_verify=False) if auth == "oauth2"
+                  else self._password_sender(fake_smtp_server, logger, tls_verify=False))
+
+        sender.send_alert("tls-verify-tunnel-2-" + auth)
+
+        fake_smtp_server._thread.join(timeout=5)
+        assert starttls_contexts == [None]
+
+    def test_disabling_verification_is_warned_at_startup(self, logger, caplog):
+        with caplog.at_level(logging.WARNING, logger=logger.name):
+            EmailAlertSender("mgr-1", "smtp.example.com", "user@example.com", "pw", "ops@example.com",
+                             logger, security="tls", tls_verify=False)
+
+        assert "certificate verification is disabled" in caplog.text
+
+    def test_an_untrusted_certificate_logs_how_to_fix_it(self, logger, caplog, monkeypatch):
+        class FakeSMTP:
+            def __init__(self, host, port, timeout=None):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def starttls(self, context=None):
+                raise ssl.SSLCertVerificationError("certificate verify failed: self-signed certificate")
+
+        monkeypatch.setattr("smtplib.SMTP", FakeSMTP)
+        sender = EmailAlertSender("mgr-1", "smtp.example.com", "user@example.com", "pw", "ops@example.com",
+                                  logger, security="tls", port=587)
+
+        with caplog.at_level(logging.ERROR, logger=logger.name):
+            sender.send_alert("tls-verify-tunnel-3")
+
+        assert "smtp_tls_verify" in caplog.text
+
+
+class TestFetchOAuthToken:
+    """What reaches the log when the token request fails: enough to diagnose,
+    never the client secret, and always naming the token request as the step.
+    """
+
+    def test_non_json_error_body_is_not_logged_because_it_may_echo_the_secret(self, monkeypatch):
+        _token_endpoint_returning(monkeypatch, _FakeTokenResponse(404, content_type="text/plain"))
+
+        with pytest.raises(OAuthTokenError) as raised:
+            fetch_oauth_token(**OAUTH)
+
+        assert OAUTH["client_secret"] not in str(raised.value)
+        assert str(raised.value) == ("OAuth token request failed (404): no access_token in the response "
+                                     "(Content-Type: text/plain)")
+
+    def test_html_page_with_200_is_reported_as_a_token_failure(self, monkeypatch):
+        _token_endpoint_returning(monkeypatch, _FakeTokenResponse(200, content_type="text/html"))
+
+        with pytest.raises(OAuthTokenError, match=r"\(200\): no access_token .*text/html"):
+            fetch_oauth_token(**OAUTH)
+
+    def test_json_without_access_token_is_reported_as_a_token_failure(self, monkeypatch):
+        _token_endpoint_returning(monkeypatch, _FakeTokenResponse(200, {"token_type": "Bearer"}))
+
+        with pytest.raises(OAuthTokenError, match="no access_token"):
+            fetch_oauth_token(**OAUTH)
+
+    def test_untrusted_token_endpoint_certificate_explains_which_ca_store_applies(self, monkeypatch):
+        def fail(*a, **k):
+            raise requests.exceptions.SSLError("certificate verify failed: unable to get local issuer certificate")
+
+        monkeypatch.setattr("alerts.email_alert.requests.post", fail)
+
+        with pytest.raises(OAuthTokenError) as raised:
+            fetch_oauth_token(**OAUTH)
+
+        message = str(raised.value)
+        assert message.startswith("OAuth token request failed")
+        assert "CA bundle shipped with the Connector" in message
+        assert "smtp_tls_verify does not apply" in message
+
+    def test_connection_failure_names_the_token_request(self, monkeypatch):
+        def fail(*a, **k):
+            raise requests.exceptions.ConnectionError("Max retries exceeded")
+
+        monkeypatch.setattr("alerts.email_alert.requests.post", fail)
+
+        with pytest.raises(OAuthTokenError, match="^OAuth token request failed: Max retries exceeded"):
+            fetch_oauth_token(**OAUTH)
+
+
+def test_no_ssl_context_is_built_for_a_plain_connection(fake_smtp_server, logger, monkeypatch):
+    built = []
+    monkeypatch.setattr("alerts.email_alert.ssl.create_default_context", lambda: built.append(1))
+    EmailAlertSender("mgr-1", fake_smtp_server.host, None, None, "ops@example.com", logger,
+                     security="none", port=fake_smtp_server.port,
+                     from_address="alerts@example.com").send_alert("plain-no-context-tunnel")
+
+    fake_smtp_server._thread.join(timeout=5)
+    assert built == []
+    assert len(fake_smtp_server.received) == 1

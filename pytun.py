@@ -19,7 +19,7 @@ import coloredlogs
 from paramiko import BadHostKeyException, PasswordRequiredException, AuthenticationException, SSHException
 import psutil
 
-from alerts.email_alert import EmailAlertSender
+from alerts.email_alert import EmailAlertSender, OAUTH_KEYS
 from alerts.http_post_alert import HTTPPostAlertSender
 from alerts.pooled_alerter import DifferentThreadAlert
 from configure_logger import LogManager
@@ -461,13 +461,21 @@ def get_post_alert_sender(logger, tunnel_manager_id, params):
 def get_smtp_alert_sender(logger, tunnel_manager_id, params):
     if params.get("smtp_hostname"):
         try:
+            # Any smtp_oauth_* key turns OAuth on; the sender then refuses an incomplete set.
+            oauth = {key: params.get("smtp_oauth_" + key) for key in OAUTH_KEYS}
+            if not any(oauth.values()):
+                oauth = None
             smtp_sender = EmailAlertSender(tunnel_manager_id, params['smtp_hostname'], params.get('smtp_login', None),
                                            params.get('smtp_password', None),
                                            params['smtp_to'], logger,
                                            port=params.getint('smtp_port', 25), from_address=params.get('smtp_from'),
-                                           security=params.get("smtp_security"))
+                                           security=params.get("smtp_security"), oauth=oauth,
+                                           tls_verify=params.getboolean("smtp_tls_verify", True))
         except KeyError as e:
             logger.exception("Missing smtp param %s" % e)
+            sys.exit(-1)
+        except ValueError as e:
+            logger.error("Invalid smtp config: %s", e)
             sys.exit(-1)
     else:
         smtp_sender = None

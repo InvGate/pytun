@@ -85,6 +85,12 @@ smtp_login=alerts@example.com         # SMTP username
 smtp_password=your-password           # SMTP password (plain text)
 smtp_from=connector@example.com       # From address
 smtp_to=admin@example.com             # Alert recipient
+smtp_tls_verify=True                  # Verify the server certificate (False only for self-signed)
+# Microsoft 365: OAuth2 instead of smtp_password (requires tls|ssl), see docs/smtp_oauth.textile
+# smtp_oauth_token_url=https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token
+# smtp_oauth_client_id=<application-client-id>
+# smtp_oauth_client_secret=<client-secret-value>
+# smtp_oauth_scope=https://outlook.office365.com/.default
 
 # Optional: HTTP POST Alerts
 http_url=https://api.example.com/webhook
@@ -335,7 +341,7 @@ If any check fails → tunnel marked as failed → process exits → parent rest
 
 ### Alerting
 
-- **Email**: SMTP with TLS/SSL, **rate limited** to 1 email per 10 minutes per tunnel
+- **Email**: SMTP with TLS/SSL, password or OAuth2 (XOAUTH2, Microsoft 365), **rate limited** to 1 email per 10 minutes per tunnel
 - **HTTP POST**: Webhook to external monitoring system, **no rate limit**
 - **Non-blocking**: Alerts sent via `ThreadPoolExecutor`, doesn't block tunnel operations
 
@@ -351,7 +357,7 @@ If any check fails → tunnel marked as failed → process exits → parent rest
 ### ⚠️ Security Warnings
 
 1. **Config Files Contain Credentials**
-   - SMTP passwords stored in plain text
+   - SMTP passwords and OAuth client secrets stored in plain text
    - Restrict file permissions: `chmod 600 connector.ini`
    - Consider encrypting config files at rest
 
@@ -429,6 +435,9 @@ python pytun.py --test_smtp
 
 # Check rate limiting (10-minute window)
 # If alert sent recently, may be suppressed
+
+# CERTIFICATE_VERIFY_FAILED (since 1.3.0 the server certificate is verified):
+# install the server's CA in the system store, or set smtp_tls_verify=False
 
 # Verify SMTP settings in connector.ini
 ```
